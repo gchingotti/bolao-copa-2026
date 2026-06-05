@@ -5,7 +5,7 @@ import * as api from "./api";
 const ENTRY_FEE = 50;
 const ROUND_POOL_PCT = 0.30;
 const FINAL_POOL_PCT = 0.70;
-const POINTS = { exact: 5, winner: 2, draw: 1, bonusChampion: 5, bonusVice: 3 };
+const POINTS = { exact: 5, winner: 2, draw: 2, bonusChampion: 5, bonusVice: 3 }; // 🟡 draw: 1 → 2
 const ADMIN_PASSWORD = "copa2026";
 const ROUNDS = ["Fase de Grupos","Oitavas","Quartas","Semifinal","3º Lugar","Final 🏆"];
 const ROUND_LABELS = {"Fase de Grupos":"Grupos","Oitavas":"Oitavas","Quartas":"Quartas","Semifinal":"Semi","3º Lugar":"3º Lugar","Final 🏆":"🏆 Final"};
@@ -241,10 +241,10 @@ function palpitesParaObj(arr) {
 // ─── APP ─────────────────────────────────────────────────────────────────────
 export default function BolaoApp() {
   const [screen, setScreen] = useState("loading");
-  const [participants, setParticipants] = useState([]); // [{id, nome}]
+  const [participants, setParticipants] = useState([]);
   const [results, setResults] = useState({});
-  const [allGuesses, setAllGuesses] = useState({});     // {participanteId: {jogoId:{home,away}, champion, vice}}
-  const [currentUser, setCurrentUser] = useState(null); // {id, nome}
+  const [allGuesses, setAllGuesses] = useState({});
+  const [currentUser, setCurrentUser] = useState(null);
   const [myGuesses, setMyGuesses] = useState({});
   const [officialChampion, setOfficialChampion] = useState("");
   const [officialVice, setOfficialVice] = useState("");
@@ -276,7 +276,6 @@ export default function BolaoApp() {
         setOfficialChampion(finalRes?.campeao || "");
         setOfficialVice(finalRes?.vice || "");
 
-        // Carrega palpites de todos
         const gMap = {};
         await Promise.all(parts.map(async p => {
           try {
@@ -290,7 +289,6 @@ export default function BolaoApp() {
         }));
         setAllGuesses(gMap);
 
-        // Sessão salva no localStorage
         try {
           const saved = localStorage.getItem("bolao-session");
           if (saved) {
@@ -437,8 +435,17 @@ export default function BolaoApp() {
         <p style={S.cardSub}>Digite seu nome e crie um PIN de 4+ dígitos</p>
         <p style={{...S.cardSub,fontSize:"0.78rem",color:"#667",marginTop:"-0.5rem"}}>Novo? Seu PIN será criado. Já tem conta? Use seu PIN cadastrado.</p>
         <input style={S.input} placeholder="Seu nome..." value={newName} onChange={e=>setNewName(e.target.value)}/>
-        <input style={S.input} type="number" placeholder="PIN (mín. 4 dígitos)..." value={newPin}
-          onChange={e=>setNewPin(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleJoin()}/>
+        {/* 🔴 fix: type="text" + inputMode="numeric" evita corte de zeros à esquerda */}
+        <input
+          style={S.input}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          placeholder="PIN (mín. 4 dígitos)..."
+          value={newPin}
+          onChange={e=>setNewPin(e.target.value.replace(/\D/g,""))}
+          onKeyDown={e=>e.key==="Enter"&&handleJoin()}
+        />
         <button style={S.btnGreen} onClick={handleJoin} disabled={loading}>{loading?"Entrando...":"Entrar"}</button>
         <button style={S.btnGhost} onClick={()=>setScreen("splash")}>Voltar</button>
         {participants.length>0&&<p style={S.hint}>Já no bolão: {participants.map(p=>p.nome).join(", ")}</p>}
@@ -520,7 +527,8 @@ export default function BolaoApp() {
               <div key={match.id} style={{...S.matchCard,...(pts===POINTS.exact?S.mExact:pts>0&&hasRes?S.mResult:pts===0&&hasRes?S.mWrong:locked&&!hasRes?S.mLocked:{})}}>
                 {match.group&&<div style={S.matchGroup}>Grupo {match.group}{match.date?` · ${match.date} ${match.time}`:""}</div>}
                 {locked&&!hasRes&&<div style={S.lockBadge}>🔒 Encerrado</div>}
-                {hasRes&&<div style={S.badge}>{pts===POINTS.exact?"🎯 +5":pts===POINTS.winner?"✅ +2":pts===POINTS.draw?"🤝 +1":"❌ 0"}</div>}
+                {/* 🟡 draw agora vale 2 pts */}
+                {hasRes&&<div style={S.badge}>{pts===POINTS.exact?"🎯 +5":pts===POINTS.winner?"✅ +2":pts===POINTS.draw?"🤝 +2":"❌ 0"}</div>}
                 <div style={S.matchRow}>
                   <div style={S.teamLbl}>{FLAG(match.home)} {match.home}</div>
                   <div style={S.scoreRow}>
@@ -619,12 +627,31 @@ export default function BolaoApp() {
             {ROUNDS.map(round=>{
               const complete=isRoundComplete(results,round);
               const winners=complete?roundWinner(participants.map(p=>p.id),allGuesses,results,round):null;
-              const winnerNames = winners ? winners.map(w=>participants.find(p=>p.id===w.name)?.nome||w.name).join(", ") : null;
+              const winnerNames=winners?winners.map(w=>participants.find(p=>p.id===w.name)?.nome||w.name).join(", "):null;
+              const prizeEach=winners?actualPool.perRound/winners.length:actualPool.perRound;
+              const isGrupos=round==="Fase de Grupos";
               return(
-                <div key={round} style={S.premioRound}>
+                <div key={round} style={{...S.premioRound,...(isGrupos&&complete&&winners?S.premioRoundDestaque:{})}}>
                   <div style={S.premioRoundLeft}>
                     <div style={S.premioRoundName}>{round}</div>
-                    {complete&&winners&&<div style={S.premioWinner}>🏅 {winnerNames} ({winners[0].pts} pts)</div>}
+                    {complete&&winners&&(
+                      <>
+                        {/* 🟡 exibe nome + pontos + valor a receber */}
+                        <div style={S.premioWinner}>
+                          🏅 {winnerNames} ({winners[0].pts} pts)
+                          {winners.length===1
+                            ? ` · recebe ${fmt(prizeEach)}`
+                            : ` · dividem ${fmt(actualPool.perRound)} (${fmt(prizeEach)} cada)`}
+                        </div>
+                        {/* destaque especial só na Fase de Grupos */}
+                        {isGrupos&&(
+                          <div style={S.premioPixBadge}>
+                            💸 Pagar via Pix: <b>{fmt(prizeEach)}</b>
+                            {winners.length>1?` para cada um dos ${winners.length} vencedores`:""}
+                          </div>
+                        )}
+                      </>
+                    )}
                     {complete&&!winners&&<div style={S.premioNoWinner}>Sem pontos</div>}
                     {!complete&&<div style={S.premioStatus}>Em andamento</div>}
                   </div>
@@ -687,7 +714,8 @@ export default function BolaoApp() {
             return(
               <div key={match.id} style={{...S.matchCard,...(pts===POINTS.exact?S.mExact:pts>0&&hasRes?S.mResult:pts===0&&hasRes?S.mWrong:{})}}>
                 {match.group&&<div style={S.matchGroup}>Grupo {match.group} · {match.date} {match.time}</div>}
-                {hasRes&&<div style={S.badge}>{pts===POINTS.exact?"🎯 +5":pts===POINTS.winner?"✅ +2":pts===POINTS.draw?"🤝 +1":"❌ 0"}</div>}
+                {/* 🟡 draw agora vale 2 pts */}
+                {hasRes&&<div style={S.badge}>{pts===POINTS.exact?"🎯 +5":pts===POINTS.winner?"✅ +2":pts===POINTS.draw?"🤝 +2":"❌ 0"}</div>}
                 <div style={S.matchRow}>
                   <div style={S.teamLbl}>{FLAG(match.home)} {match.home}</div>
                   <div style={S.scoreRow}>
@@ -782,7 +810,8 @@ export default function BolaoApp() {
           <div style={S.ruleTitle}>⚽ Pontuação por jogo</div>
           <div style={S.ruleRow}><span>🎯 Placar exato</span><span style={S.pts5}>5 pts</span></div>
           <div style={S.ruleRow}><span>✅ Vencedor correto</span><span style={S.pts2}>2 pts</span></div>
-          <div style={S.ruleRow}><span>🤝 Empate correto</span><span style={S.pts1}>1 pt</span></div>
+          {/* 🟡 empate atualizado para 2 pts */}
+          <div style={S.ruleRow}><span>🤝 Empate correto</span><span style={S.pts1}>2 pts</span></div>
           <div style={S.ruleRow}><span>❌ Erro total</span><span style={{color:"#888"}}>0 pts</span></div>
         </div>
         <div style={S.ruleCard}>
@@ -982,12 +1011,16 @@ const S={
   premioSectionSub:{fontWeight:400,color:"#889",fontSize:"0.85rem"},
   premioSectionDesc:{fontSize:"0.82rem",color:"#aab",marginBottom:"0.25rem"},
   premioRound:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0.6rem 0",borderTop:"1px solid rgba(255,255,255,0.06)"},
+  // 🟡 destaque especial para Fase de Grupos quando encerrada
+  premioRoundDestaque:{background:"rgba(240,192,64,0.07)",borderRadius:"0.75rem",padding:"0.75rem",borderTop:"none",marginTop:"0.25rem",border:"1px solid rgba(240,192,64,0.2)"},
   premioRoundLeft:{flex:1},
   premioRoundName:{fontWeight:600,fontSize:"0.9rem"},
   premioWinner:{fontSize:"0.78rem",color:"#f0c040",marginTop:"0.2rem"},
   premioNoWinner:{fontSize:"0.78rem",color:"#889",marginTop:"0.2rem"},
   premioStatus:{fontSize:"0.78rem",color:"#556",marginTop:"0.2rem"},
   premioRoundPrize:{fontWeight:700,color:"#f0c040",fontSize:"0.95rem"},
+  // 🟡 badge de Pix para Fase de Grupos
+  premioPixBadge:{marginTop:"0.5rem",background:"rgba(46,204,113,0.12)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:"0.5rem",padding:"0.4rem 0.6rem",fontSize:"0.82rem",color:"#2ecc71"},
   premioFinal:{background:"rgba(240,192,64,0.08)",border:"1px solid rgba(240,192,64,0.2)",borderRadius:"0.75rem",padding:"1rem",textAlign:"center",marginTop:"0.25rem"},
   premioFinalNum:{fontSize:"2.2rem",fontWeight:900,color:"#f0c040"},
   premioFinalLider:{fontSize:"0.85rem",color:"#ccc",marginTop:"0.4rem"},
