@@ -10,13 +10,14 @@ async function call(action, params = {}) {
     const url = new URL(BASE_URL);
     url.searchParams.set("action", action);
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-    const res = await fetch(url.toString());
+    const res = await fetch(url.toString(), { redirect: "follow" });
     const data = await res.json();
     if (data.erro) throw new Error(data.erro);
     return data;
   } else {
     const res = await fetch(BASE_URL, {
       method: "POST",
+      redirect: "follow",
       body: JSON.stringify({ action, ...params }),
     });
     const data = await res.json();
