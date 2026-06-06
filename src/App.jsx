@@ -5,7 +5,7 @@ import * as api from "./api";
 const ENTRY_FEE = 50;
 const ROUND_POOL_PCT = 0.30;
 const FINAL_POOL_PCT = 0.70;
-const POINTS = { exact: 5, winner: 2, draw: 2, bonusChampion: 5, bonusVice: 3 }; // 🟡 draw: 1 → 2
+const POINTS = { exact: 5, winner: 2, draw: 2, bonusChampion: 5, bonusVice: 3 };
 const ADMIN_PASSWORD = "copa2026";
 const ROUNDS = ["Fase de Grupos","Oitavas","Quartas","Semifinal","3º Lugar","Final 🏆"];
 const ROUND_LABELS = {"Fase de Grupos":"Grupos","Oitavas":"Oitavas","Quartas":"Quartas","Semifinal":"Semi","3º Lugar":"3º Lugar","Final 🏆":"🏆 Final"};
@@ -212,7 +212,6 @@ function calcPool(n) {
   return {total,roundPool:rp,finalPool:fp,perRound:rp/ROUNDS.length};
 }
 
-// ─── Converte array do Sheets → objeto {jogoId: {home, away}} ────────────────
 function resultadosParaObj(arr) {
   const obj = {};
   if (!Array.isArray(arr)) return obj;
@@ -224,7 +223,6 @@ function resultadosParaObj(arr) {
   return obj;
 }
 
-// ─── Converte array de palpites do Sheets → objeto {jogoId: {home, away}} ───
 function palpitesParaObj(arr) {
   const obj = {};
   if (!Array.isArray(arr)) return obj;
@@ -253,14 +251,16 @@ export default function BolaoApp() {
   const [adminPass, setAdminPass] = useState("");
   const [activeRound, setActiveRound] = useState("Fase de Grupos");
   const [toast, setToast] = useState(null);
-  const [saveTimer, setSaveTimer] = useState(null);
   const [roundSummary, setRoundSummary] = useState(null);
   const [viewingUser, setViewingUser] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // Refs para debounce — palpites e resultados admin
+  const guessTimers = useRef({});
+  const resultTimers = useRef({});
+
   const showToast=(msg,type="ok")=>{ setToast({msg,type}); setTimeout(()=>setToast(null),2800); };
 
-  // ── Carrega dados iniciais ──────────────────────────────────────────────────
   useEffect(()=>{
     async function load(){
       try {
@@ -269,7 +269,6 @@ export default function BolaoApp() {
           api.getResultados(),
           api.getResultadoFinal(),
         ]);
-
         const parts = Array.isArray(partsArr) ? partsArr : [];
         setParticipants(parts);
         setResults(resultadosParaObj(resArr));
@@ -310,24 +309,22 @@ export default function BolaoApp() {
     load();
   },[]);
 
-  // ── Salvar palpite com debounce ────────────────────────────────────────────
-  const saveGuessDebounced = useCallback((participanteId, matchId, golsA, golsB) => {
-    if (saveTimer) clearTimeout(saveTimer);
-    setSaveTimer(setTimeout(async () => {
-      try {
-        await api.salvarPalpite(participanteId, matchId, golsA, golsB);
-      } catch(e) { console.error("Erro ao salvar palpite:", e); }
-    }, 800));
-  }, [saveTimer]);
-
+  // ── Salvar palpite com debounce por jogo ──────────────────────────────────
   const handleGuessChange=(matchId,side,val)=>{
     const updated={...myGuesses,[matchId]:{...(myGuesses[matchId]||{}),[side]:val}};
     setMyGuesses(updated);
     setAllGuesses(prev=>({...prev,[currentUser.id]:updated}));
-    const g = updated[matchId] || {};
-    const golsA = side === "home" ? val : (g.home ?? "");
-    const golsB = side === "away" ? val : (g.away ?? "");
-    saveGuessDebounced(currentUser.id, matchId, golsA, golsB);
+
+    if (guessTimers.current[matchId]) clearTimeout(guessTimers.current[matchId]);
+    guessTimers.current[matchId] = setTimeout(async () => {
+      const g = updated[matchId] || {};
+      const golsA = g.home ?? "";
+      const golsB = g.away ?? "";
+      if (golsA === "" || golsB === "") return; // só salva quando os dois campos estão preenchidos
+      try {
+        await api.salvarPalpite(currentUser.id, matchId, golsA, golsB);
+      } catch(e) { console.error("Erro ao salvar palpite:", e); }
+    }, 800);
   };
 
   // ── Login / Cadastro ───────────────────────────────────────────────────────
@@ -369,14 +366,21 @@ export default function BolaoApp() {
     setCurrentUser(null); setMyGuesses({}); setScreen("splash");
   };
 
-  // ── Admin: salvar resultado ────────────────────────────────────────────────
-  const handleResultChange=async(matchId,side,val)=>{
+  // ── Admin: salvar resultado com debounce por jogo ─────────────────────────
+  const handleResultChange=(matchId,side,val)=>{
     const updated={...results,[matchId]:{...(results[matchId]||{}),[side]:val}};
     setResults(updated);
-    const r = updated[matchId] || {};
-    try {
-      await api.salvarResultado(adminPass, matchId, r.home ?? "", r.away ?? "");
-    } catch(e) { console.error(e); }
+
+    if (resultTimers.current[matchId]) clearTimeout(resultTimers.current[matchId]);
+    resultTimers.current[matchId] = setTimeout(async () => {
+      const r = updated[matchId] || {};
+      const golsA = r.home ?? "";
+      const golsB = r.away ?? "";
+      if (golsA === "" || golsB === "") return; // só salva quando os dois campos estão preenchidos
+      try {
+        await api.salvarResultado(adminPass, matchId, golsA, golsB);
+      } catch(e) { console.error("Erro ao salvar resultado:", e); }
+    }, 800);
   };
 
   const handleChampionChange=async(field,val)=>{
@@ -397,7 +401,6 @@ export default function BolaoApp() {
     setRoundSummary({round,data});
   };
 
-  // ── Derived ────────────────────────────────────────────────────────────────
   const pool=calcPool(participants.length||10);
   const ranking=participants.map(p=>({
     id: p.id,
@@ -435,7 +438,6 @@ export default function BolaoApp() {
         <p style={S.cardSub}>Digite seu nome e crie um PIN de 4+ dígitos</p>
         <p style={{...S.cardSub,fontSize:"0.78rem",color:"#667",marginTop:"-0.5rem"}}>Novo? Seu PIN será criado. Já tem conta? Use seu PIN cadastrado.</p>
         <input style={S.input} placeholder="Seu nome..." value={newName} onChange={e=>setNewName(e.target.value)}/>
-        {/* 🔴 fix: type="text" + inputMode="numeric" evita corte de zeros à esquerda */}
         <input
           style={S.input}
           type="text"
@@ -527,7 +529,6 @@ export default function BolaoApp() {
               <div key={match.id} style={{...S.matchCard,...(pts===POINTS.exact?S.mExact:pts>0&&hasRes?S.mResult:pts===0&&hasRes?S.mWrong:locked&&!hasRes?S.mLocked:{})}}>
                 {match.group&&<div style={S.matchGroup}>Grupo {match.group}{match.date?` · ${match.date} ${match.time}`:""}</div>}
                 {locked&&!hasRes&&<div style={S.lockBadge}>🔒 Encerrado</div>}
-                {/* 🟡 draw agora vale 2 pts */}
                 {hasRes&&<div style={S.badge}>{pts===POINTS.exact?"🎯 +5":pts===POINTS.winner?"✅ +2":pts===POINTS.draw?"🤝 +2":"❌ 0"}</div>}
                 <div style={S.matchRow}>
                   <div style={S.teamLbl}>{FLAG(match.home)} {match.home}</div>
@@ -636,14 +637,12 @@ export default function BolaoApp() {
                     <div style={S.premioRoundName}>{round}</div>
                     {complete&&winners&&(
                       <>
-                        {/* 🟡 exibe nome + pontos + valor a receber */}
                         <div style={S.premioWinner}>
                           🏅 {winnerNames} ({winners[0].pts} pts)
                           {winners.length===1
                             ? ` · recebe ${fmt(prizeEach)}`
                             : ` · dividem ${fmt(actualPool.perRound)} (${fmt(prizeEach)} cada)`}
                         </div>
-                        {/* destaque especial só na Fase de Grupos */}
                         {isGrupos&&(
                           <div style={S.premioPixBadge}>
                             💸 Pagar via Pix: <b>{fmt(prizeEach)}</b>
@@ -714,7 +713,6 @@ export default function BolaoApp() {
             return(
               <div key={match.id} style={{...S.matchCard,...(pts===POINTS.exact?S.mExact:pts>0&&hasRes?S.mResult:pts===0&&hasRes?S.mWrong:{})}}>
                 {match.group&&<div style={S.matchGroup}>Grupo {match.group} · {match.date} {match.time}</div>}
-                {/* 🟡 draw agora vale 2 pts */}
                 {hasRes&&<div style={S.badge}>{pts===POINTS.exact?"🎯 +5":pts===POINTS.winner?"✅ +2":pts===POINTS.draw?"🤝 +2":"❌ 0"}</div>}
                 <div style={S.matchRow}>
                   <div style={S.teamLbl}>{FLAG(match.home)} {match.home}</div>
@@ -810,7 +808,6 @@ export default function BolaoApp() {
           <div style={S.ruleTitle}>⚽ Pontuação por jogo</div>
           <div style={S.ruleRow}><span>🎯 Placar exato</span><span style={S.pts5}>5 pts</span></div>
           <div style={S.ruleRow}><span>✅ Vencedor correto</span><span style={S.pts2}>2 pts</span></div>
-          {/* 🟡 empate atualizado para 2 pts */}
           <div style={S.ruleRow}><span>🤝 Empate correto</span><span style={S.pts1}>2 pts</span></div>
           <div style={S.ruleRow}><span>❌ Erro total</span><span style={{color:"#888"}}>0 pts</span></div>
         </div>
@@ -886,7 +883,7 @@ export default function BolaoApp() {
             </div>
           </div>
         </div>
-        <div style={S.autoSave}>💾 Resultados salvos automaticamente</div>
+        <div style={S.autoSave}>💾 Resultados salvos automaticamente quando os dois campos estão preenchidos</div>
         {toast&&<Toast t={toast}/>}
       </div>
     );
@@ -1011,7 +1008,6 @@ const S={
   premioSectionSub:{fontWeight:400,color:"#889",fontSize:"0.85rem"},
   premioSectionDesc:{fontSize:"0.82rem",color:"#aab",marginBottom:"0.25rem"},
   premioRound:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0.6rem 0",borderTop:"1px solid rgba(255,255,255,0.06)"},
-  // 🟡 destaque especial para Fase de Grupos quando encerrada
   premioRoundDestaque:{background:"rgba(240,192,64,0.07)",borderRadius:"0.75rem",padding:"0.75rem",borderTop:"none",marginTop:"0.25rem",border:"1px solid rgba(240,192,64,0.2)"},
   premioRoundLeft:{flex:1},
   premioRoundName:{fontWeight:600,fontSize:"0.9rem"},
@@ -1019,7 +1015,6 @@ const S={
   premioNoWinner:{fontSize:"0.78rem",color:"#889",marginTop:"0.2rem"},
   premioStatus:{fontSize:"0.78rem",color:"#556",marginTop:"0.2rem"},
   premioRoundPrize:{fontWeight:700,color:"#f0c040",fontSize:"0.95rem"},
-  // 🟡 badge de Pix para Fase de Grupos
   premioPixBadge:{marginTop:"0.5rem",background:"rgba(46,204,113,0.12)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:"0.5rem",padding:"0.4rem 0.6rem",fontSize:"0.82rem",color:"#2ecc71"},
   premioFinal:{background:"rgba(240,192,64,0.08)",border:"1px solid rgba(240,192,64,0.2)",borderRadius:"0.75rem",padding:"1rem",textAlign:"center",marginTop:"0.25rem"},
   premioFinalNum:{fontSize:"2.2rem",fontWeight:900,color:"#f0c040"},
@@ -1031,7 +1026,8 @@ const S={
   bonusRow:{display:"flex",alignItems:"center",gap:"0.75rem"},
   bonusLabel:{flex:1,fontSize:"0.88rem",fontWeight:600},
   bonusPts:{color:"#f0c040",fontWeight:700,marginLeft:"0.4rem"},
-  bonusSel:{flex:1.5,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:"0.5rem",padding:"0.5rem",color:"#fff",fontSize:"0.85rem",outline:"none"},
+  // fix: cor do texto do select forçada para branco
+  bonusSel:{flex:1.5,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:"0.5rem",padding:"0.5rem",color:"#fff",fontSize:"0.85rem",outline:"none",WebkitTextFillColor:"#fff"},
   rodadaCard:{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"1rem",padding:"1rem",display:"flex",flexDirection:"column",gap:"0.4rem"},
   rodadaHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"0.4rem",flexWrap:"wrap",gap:"0.3rem"},
   rodadaName:{fontWeight:700,fontSize:"0.95rem"},
