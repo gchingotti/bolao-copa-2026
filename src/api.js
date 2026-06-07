@@ -5,7 +5,7 @@
 // ============================================================
 
 const API_URL =
-  'https://script.google.com/macros/s/AKfycbxPmhxSU0zcTmQrc7qU1zaJgxwaGjwIxYg9Gf6LDmrnljBYhZX3EvdRUU2bhL2ihlvT/exec';
+  'https://script.google.com/macros/s/AKfycbwDtj4utRVA2ZajNdt99LNnOUub9biNB_Or7gORFXlbxXAeW-uothzbBiL2ugTti6RvgQ/exec';
 
 async function post(acao, dados = {}) {
   const res = await fetch(API_URL, {
