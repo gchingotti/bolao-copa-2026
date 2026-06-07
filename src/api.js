@@ -1,39 +1,100 @@
-const BASE_URL = "https://script.google.com/macros/s/AKfycbwDtj4utRVA2ZajNdt99LNnOUub9biNB_Or7gORFXlbxXAeW-uothzbBiL2ugTti6RvgQ/exec";
+// ============================================================
+// api.js — Camada de comunicação com o Google Apps Script
+// URL embutida direto aqui (não usar .env — não vai pro GitHub)
+// TODAS as requisições são POST, inclusive leituras (resolve bug 302/CORS)
+// ============================================================
 
-async function call(action, params = {}) {
-  const isRead = [
-    "listarParticipantes","getPalpites","getPalpitesFinal",
-    "getResultados","getResultadoFinal"
-  ].includes(action);
+const API_URL =
+  'https://script.google.com/macros/s/AKfycbxPmhxSU0zcTmQrc7qU1zaJgxwaGjwIxYg9Gf6LDmrnljBYhZX3EvdRUU2bhL2ihlvT/exec';
 
-  if (isRead) {
-    const url = new URL(BASE_URL);
-    url.searchParams.set("action", action);
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-    const res = await fetch(url.toString(), { redirect: "follow" });
-    const data = await res.json();
-    if (data.erro) throw new Error(data.erro);
-    return data;
-  } else {
-    const res = await fetch(BASE_URL, {
-      method: "POST",
-      redirect: "follow",
-      body: JSON.stringify({ action, ...params }),
-    });
-    const data = await res.json();
-    if (data.erro) throw new Error(data.erro);
-    return data;
-  }
+async function post(acao, dados = {}) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // text/plain evita preflight CORS
+    body: JSON.stringify({ acao, ...dados }),
+    redirect: 'follow',
+  });
+
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.erro || 'Erro desconhecido');
+  return json;
 }
 
-export const criarParticipante  = (nome, pin)                    => call("criarParticipante",   { nome, pin });
-export const autenticar         = (nome, pin)                    => call("autenticar",           { nome, pin });
-export const listarParticipantes= ()                             => call("listarParticipantes");
-export const salvarPalpite      = (participanteId, jogoId, golsA, golsB) => call("salvarPalpite", { participanteId, jogoId, golsA, golsB });
-export const salvarPalpiteFinal = (participanteId, campeao, vice)        => call("salvarPalpiteFinal", { participanteId, campeao, vice });
-export const getPalpites        = (participanteId)               => call("getPalpites",          { participanteId });
-export const getPalpitesFinal   = ()                             => call("getPalpitesFinal");
-export const getResultados      = ()                             => call("getResultados");
-export const getResultadoFinal  = ()                             => call("getResultadoFinal");
-export const salvarResultado    = (senhaAdmin, jogoId, golsA, golsB) => call("salvarResultado", { senhaAdmin, jogoId, golsA, golsB });
-export const salvarResultadoFinal = (senhaAdmin, campeao, vice)      => call("salvarResultadoFinal", { senhaAdmin, campeao, vice });
+// ── Participantes ─────────────────────────────────────────────
+
+export async function cadastrar(nome, pin) {
+  return post('cadastrar', { nome, pin: String(pin) });
+}
+
+export async function login(nome, pin) {
+  return post('login', { nome, pin: String(pin) });
+}
+
+// ── Jogos ─────────────────────────────────────────────────────
+
+export async function getJogos() {
+  return post('getJogos');
+}
+
+// ── Palpites ──────────────────────────────────────────────────
+
+export async function getPalpites(participanteId) {
+  return post('getPalpites', { participanteId });
+}
+
+export async function salvarPalpite(participanteId, jogoId, golsCasa, golsVisitante) {
+  // Só dispara quando os dois campos estão preenchidos (resolve bug de duplicatas)
+  if (golsCasa === '' || golsCasa === null || golsCasa === undefined) return;
+  if (golsVisitante === '' || golsVisitante === null || golsVisitante === undefined) return;
+
+  return post('salvarPalpite', {
+    participanteId,
+    jogoId,
+    golsCasa: Number(golsCasa),
+    golsVisitante: Number(golsVisitante),
+  });
+}
+
+// ── Palpite Final (campeão e vice) ────────────────────────────
+
+export async function getPalpiteFinal(participanteId) {
+  return post('getPalpiteFinal', { participanteId });
+}
+
+export async function salvarPalpiteFinal(participanteId, campeao, vice) {
+  return post('salvarPalpiteFinal', { participanteId, campeao, vice });
+}
+
+// ── Ranking ───────────────────────────────────────────────────
+
+export async function getRanking() {
+  return post('getRanking');
+}
+
+// ── Resultados ────────────────────────────────────────────────
+
+export async function getResultados() {
+  return post('getResultados');
+}
+
+// ── Config pública ────────────────────────────────────────────
+
+export async function getConfig() {
+  return post('getConfig');
+}
+
+// ── Admin ─────────────────────────────────────────────────────
+
+export async function adminLogin(senha) {
+  return post('adminLogin', { senha });
+}
+
+export async function lancarResultado(senha, jogoId, golsCasa, golsVisitante) {
+  return post('lancarResultado', { senha, jogoId, golsCasa: Number(golsCasa), golsVisitante: Number(golsVisitante) });
+}
+
+export async function lancarResultadoFinal(senha, campeao, vice) {
+  return post('lancarResultadoFinal', { senha, campeao, vice });
+}

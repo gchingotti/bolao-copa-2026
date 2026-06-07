@@ -1,1054 +1,607 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import * as api from "./api";
+import { useState, useEffect, useCallback } from 'react';
+import * as api from './api';
 
-// ─── CONSTANTS ───────────────────────────────────────────────────────────────
-const ENTRY_FEE = 50;
-const ROUND_POOL_PCT = 0.30;
-const FINAL_POOL_PCT = 0.70;
-const POINTS = { exact: 5, winner: 2, draw: 2, bonusChampion: 5, bonusVice: 3 };
-const ADMIN_PASSWORD = "copa2026";
-const ROUNDS = ["Fase de Grupos","Oitavas","Quartas","Semifinal","3º Lugar","Final 🏆"];
-const ROUND_LABELS = {"Fase de Grupos":"Grupos","Oitavas":"Oitavas","Quartas":"Quartas","Semifinal":"Semi","3º Lugar":"3º Lugar","Final 🏆":"🏆 Final"};
+// ── Constantes ────────────────────────────────────────────────
+const SENHA_ADMIN = 'copa2026'; // deve bater com a aba config no Sheets
 
-// ─── COPA 2026 DATA ──────────────────────────────────────────────────────────
-const GROUPS = {
-  A:["México","África do Sul","Coreia do Sul","República Tcheca"],
-  B:["Canadá","Bósnia-Herzegovina","Catar","Suíça"],
-  C:["Brasil","Marrocos","Haiti","Escócia"],
-  D:["Estados Unidos","Paraguai","Austrália","Turquia"],
-  E:["Alemanha","Curaçao","Costa do Marfim","Equador"],
-  F:["Países Baixos","Japão","Suécia","Tunísia"],
-  G:["Bélgica","Egito","Irã","Nova Zelândia"],
-  H:["Espanha","Cabo Verde","Arábia Saudita","Uruguai"],
-  I:["França","Senegal","Iraque","Noruega"],
-  J:["Argentina","Argélia","Áustria","Jordânia"],
-  K:["Portugal","RD Congo","Uzbequistão","Colômbia"],
-  L:["Inglaterra","Croácia","Gana","Panamá"],
-};
-const ALL_TEAMS = Object.values(GROUPS).flat();
-
-const FLAGS = {
-  "México":"🇲🇽","África do Sul":"🇿🇦","Coreia do Sul":"🇰🇷","República Tcheca":"🇨🇿",
-  "Canadá":"🇨🇦","Bósnia-Herzegovina":"🇧🇦","Catar":"🇶🇦","Suíça":"🇨🇭",
-  "Brasil":"🇧🇷","Marrocos":"🇲🇦","Haiti":"🇭🇹","Escócia":"🏴󠁧󠁢󠁳󠁣󠁴󠁿",
-  "Estados Unidos":"🇺🇸","Paraguai":"🇵🇾","Austrália":"🇦🇺","Turquia":"🇹🇷",
-  "Alemanha":"🇩🇪","Curaçao":"🇨🇼","Costa do Marfim":"🇨🇮","Equador":"🇪🇨",
-  "Países Baixos":"🇳🇱","Japão":"🇯🇵","Suécia":"🇸🇪","Tunísia":"🇹🇳",
-  "Bélgica":"🇧🇪","Egito":"🇪🇬","Irã":"🇮🇷","Nova Zelândia":"🇳🇿",
-  "Espanha":"🇪🇸","Cabo Verde":"🇨🇻","Arábia Saudita":"🇸🇦","Uruguai":"🇺🇾",
-  "França":"🇫🇷","Senegal":"🇸🇳","Iraque":"🇮🇶","Noruega":"🇳🇴",
-  "Argentina":"🇦🇷","Argélia":"🇩🇿","Áustria":"🇦🇹","Jordânia":"🇯🇴",
-  "Portugal":"🇵🇹","RD Congo":"🇨🇩","Uzbequistão":"🇺🇿","Colômbia":"🇨🇴",
-  "Inglaterra":"🏴󠁧󠁢󠁥󠁮󠁧󠁿","Croácia":"🇭🇷","Gana":"🇬🇭","Panamá":"🇵🇦",
-};
-
-const GROUP_MATCHES = [
-  {id:"A1",group:"A",home:"México",away:"África do Sul",round:"Fase de Grupos",date:"11/06",time:"16:00"},
-  {id:"A2",group:"A",home:"Coreia do Sul",away:"República Tcheca",round:"Fase de Grupos",date:"11/06",time:"23:00"},
-  {id:"A3",group:"A",home:"República Tcheca",away:"África do Sul",round:"Fase de Grupos",date:"18/06",time:"13:00"},
-  {id:"A4",group:"A",home:"México",away:"Coreia do Sul",round:"Fase de Grupos",date:"18/06",time:"22:00"},
-  {id:"A5",group:"A",home:"República Tcheca",away:"México",round:"Fase de Grupos",date:"24/06",time:"22:00"},
-  {id:"A6",group:"A",home:"África do Sul",away:"Coreia do Sul",round:"Fase de Grupos",date:"24/06",time:"22:00"},
-  {id:"B1",group:"B",home:"Canadá",away:"Bósnia-Herzegovina",round:"Fase de Grupos",date:"12/06",time:"16:00"},
-  {id:"B2",group:"B",home:"Catar",away:"Suíça",round:"Fase de Grupos",date:"13/06",time:"16:00"},
-  {id:"B3",group:"B",home:"Suíça",away:"Bósnia-Herzegovina",round:"Fase de Grupos",date:"18/06",time:"16:00"},
-  {id:"B4",group:"B",home:"Canadá",away:"Catar",round:"Fase de Grupos",date:"18/06",time:"19:00"},
-  {id:"B5",group:"B",home:"Suíça",away:"Canadá",round:"Fase de Grupos",date:"24/06",time:"16:00"},
-  {id:"B6",group:"B",home:"Bósnia-Herzegovina",away:"Catar",round:"Fase de Grupos",date:"24/06",time:"16:00"},
-  {id:"C1",group:"C",home:"Brasil",away:"Marrocos",round:"Fase de Grupos",date:"13/06",time:"19:00"},
-  {id:"C2",group:"C",home:"Haiti",away:"Escócia",round:"Fase de Grupos",date:"13/06",time:"22:00"},
-  {id:"C3",group:"C",home:"Escócia",away:"Marrocos",round:"Fase de Grupos",date:"19/06",time:"19:00"},
-  {id:"C4",group:"C",home:"Brasil",away:"Haiti",round:"Fase de Grupos",date:"19/06",time:"21:30"},
-  {id:"C5",group:"C",home:"Escócia",away:"Brasil",round:"Fase de Grupos",date:"24/06",time:"19:00"},
-  {id:"C6",group:"C",home:"Marrocos",away:"Haiti",round:"Fase de Grupos",date:"24/06",time:"19:00"},
-  {id:"D1",group:"D",home:"Estados Unidos",away:"Paraguai",round:"Fase de Grupos",date:"12/06",time:"22:00"},
-  {id:"D2",group:"D",home:"Austrália",away:"Turquia",round:"Fase de Grupos",date:"13/06",time:"01:00"},
-  {id:"D3",group:"D",home:"Turquia",away:"Paraguai",round:"Fase de Grupos",date:"19/06",time:"01:00"},
-  {id:"D4",group:"D",home:"Estados Unidos",away:"Austrália",round:"Fase de Grupos",date:"19/06",time:"16:00"},
-  {id:"D5",group:"D",home:"Turquia",away:"Estados Unidos",round:"Fase de Grupos",date:"25/06",time:"23:00"},
-  {id:"D6",group:"D",home:"Paraguai",away:"Austrália",round:"Fase de Grupos",date:"25/06",time:"23:00"},
-  {id:"E1",group:"E",home:"Alemanha",away:"Curaçao",round:"Fase de Grupos",date:"14/06",time:"14:00"},
-  {id:"E2",group:"E",home:"Costa do Marfim",away:"Equador",round:"Fase de Grupos",date:"14/06",time:"20:00"},
-  {id:"E3",group:"E",home:"Alemanha",away:"Costa do Marfim",round:"Fase de Grupos",date:"20/06",time:"17:00"},
-  {id:"E4",group:"E",home:"Equador",away:"Curaçao",round:"Fase de Grupos",date:"20/06",time:"21:00"},
-  {id:"E5",group:"E",home:"Curaçao",away:"Costa do Marfim",round:"Fase de Grupos",date:"25/06",time:"17:00"},
-  {id:"E6",group:"E",home:"Equador",away:"Alemanha",round:"Fase de Grupos",date:"25/06",time:"17:00"},
-  {id:"F1",group:"F",home:"Países Baixos",away:"Japão",round:"Fase de Grupos",date:"14/06",time:"17:00"},
-  {id:"F2",group:"F",home:"Suécia",away:"Tunísia",round:"Fase de Grupos",date:"14/06",time:"23:00"},
-  {id:"F3",group:"F",home:"Tunísia",away:"Japão",round:"Fase de Grupos",date:"20/06",time:"01:00"},
-  {id:"F4",group:"F",home:"Países Baixos",away:"Suécia",round:"Fase de Grupos",date:"20/06",time:"14:00"},
-  {id:"F5",group:"F",home:"Japão",away:"Suécia",round:"Fase de Grupos",date:"25/06",time:"20:00"},
-  {id:"F6",group:"F",home:"Tunísia",away:"Países Baixos",round:"Fase de Grupos",date:"25/06",time:"20:00"},
-  {id:"G1",group:"G",home:"Bélgica",away:"Egito",round:"Fase de Grupos",date:"15/06",time:"16:00"},
-  {id:"G2",group:"G",home:"Irã",away:"Nova Zelândia",round:"Fase de Grupos",date:"15/06",time:"22:00"},
-  {id:"G3",group:"G",home:"Bélgica",away:"Irã",round:"Fase de Grupos",date:"21/06",time:"16:00"},
-  {id:"G4",group:"G",home:"Nova Zelândia",away:"Egito",round:"Fase de Grupos",date:"21/06",time:"22:00"},
-  {id:"G5",group:"G",home:"Egito",away:"Irã",round:"Fase de Grupos",date:"27/06",time:"00:00"},
-  {id:"G6",group:"G",home:"Nova Zelândia",away:"Bélgica",round:"Fase de Grupos",date:"27/06",time:"00:00"},
-  {id:"H1",group:"H",home:"Espanha",away:"Cabo Verde",round:"Fase de Grupos",date:"15/06",time:"13:00"},
-  {id:"H2",group:"H",home:"Arábia Saudita",away:"Uruguai",round:"Fase de Grupos",date:"15/06",time:"19:00"},
-  {id:"H3",group:"H",home:"Espanha",away:"Arábia Saudita",round:"Fase de Grupos",date:"21/06",time:"13:00"},
-  {id:"H4",group:"H",home:"Uruguai",away:"Cabo Verde",round:"Fase de Grupos",date:"21/06",time:"19:00"},
-  {id:"H5",group:"H",home:"Cabo Verde",away:"Arábia Saudita",round:"Fase de Grupos",date:"26/06",time:"21:00"},
-  {id:"H6",group:"H",home:"Uruguai",away:"Espanha",round:"Fase de Grupos",date:"26/06",time:"21:00"},
-  {id:"I1",group:"I",home:"França",away:"Senegal",round:"Fase de Grupos",date:"16/06",time:"16:00"},
-  {id:"I2",group:"I",home:"Iraque",away:"Noruega",round:"Fase de Grupos",date:"16/06",time:"19:00"},
-  {id:"I3",group:"I",home:"França",away:"Iraque",round:"Fase de Grupos",date:"22/06",time:"18:00"},
-  {id:"I4",group:"I",home:"Noruega",away:"Senegal",round:"Fase de Grupos",date:"22/06",time:"21:00"},
-  {id:"I5",group:"I",home:"Noruega",away:"França",round:"Fase de Grupos",date:"26/06",time:"16:00"},
-  {id:"I6",group:"I",home:"Senegal",away:"Iraque",round:"Fase de Grupos",date:"26/06",time:"16:00"},
-  {id:"J1",group:"J",home:"Áustria",away:"Jordânia",round:"Fase de Grupos",date:"16/06",time:"01:00"},
-  {id:"J2",group:"J",home:"Argentina",away:"Argélia",round:"Fase de Grupos",date:"16/06",time:"22:00"},
-  {id:"J3",group:"J",home:"Argentina",away:"Áustria",round:"Fase de Grupos",date:"22/06",time:"14:00"},
-  {id:"J4",group:"J",home:"Jordânia",away:"Argélia",round:"Fase de Grupos",date:"22/06",time:"00:00"},
-  {id:"J5",group:"J",home:"Argélia",away:"Áustria",round:"Fase de Grupos",date:"27/06",time:"23:00"},
-  {id:"J6",group:"J",home:"Jordânia",away:"Argentina",round:"Fase de Grupos",date:"27/06",time:"23:00"},
-  {id:"K1",group:"K",home:"Portugal",away:"RD Congo",round:"Fase de Grupos",date:"17/06",time:"14:00"},
-  {id:"K2",group:"K",home:"Colômbia",away:"Uzbequistão",round:"Fase de Grupos",date:"17/06",time:"23:00"},
-  {id:"K3",group:"K",home:"Portugal",away:"Uzbequistão",round:"Fase de Grupos",date:"23/06",time:"14:00"},
-  {id:"K4",group:"K",home:"Colômbia",away:"RD Congo",round:"Fase de Grupos",date:"23/06",time:"23:00"},
-  {id:"K5",group:"K",home:"Colômbia",away:"Portugal",round:"Fase de Grupos",date:"27/06",time:"20:30"},
-  {id:"K6",group:"K",home:"RD Congo",away:"Uzbequistão",round:"Fase de Grupos",date:"27/06",time:"20:30"},
-  {id:"L1",group:"L",home:"Inglaterra",away:"Croácia",round:"Fase de Grupos",date:"17/06",time:"17:00"},
-  {id:"L2",group:"L",home:"Gana",away:"Panamá",round:"Fase de Grupos",date:"17/06",time:"20:00"},
-  {id:"L3",group:"L",home:"Inglaterra",away:"Gana",round:"Fase de Grupos",date:"23/06",time:"17:00"},
-  {id:"L4",group:"L",home:"Panamá",away:"Croácia",round:"Fase de Grupos",date:"23/06",time:"20:00"},
-  {id:"L5",group:"L",home:"Panamá",away:"Inglaterra",round:"Fase de Grupos",date:"27/06",time:"18:00"},
-  {id:"L6",group:"L",home:"Croácia",away:"Gana",round:"Fase de Grupos",date:"27/06",time:"18:00"},
-];
-
-const KNOCKOUT_MATCHES = [
-  {id:"r32_1",round:"Oitavas",home:"1º A",away:"3º D/E/F"},
-  {id:"r32_2",round:"Oitavas",home:"1º B",away:"3º A/C/D"},
-  {id:"r32_3",round:"Oitavas",home:"1º C",away:"3º G/H/I"},
-  {id:"r32_4",round:"Oitavas",home:"1º D",away:"2º B"},
-  {id:"r32_5",round:"Oitavas",home:"1º E",away:"3º J/K/L"},
-  {id:"r32_6",round:"Oitavas",home:"1º F",away:"2º A"},
-  {id:"r32_7",round:"Oitavas",home:"1º G",away:"2º C"},
-  {id:"r32_8",round:"Oitavas",home:"1º H",away:"2º D"},
-  {id:"r32_9",round:"Oitavas",home:"1º I",away:"2º E"},
-  {id:"r32_10",round:"Oitavas",home:"1º J",away:"2º F"},
-  {id:"r32_11",round:"Oitavas",home:"1º K",away:"2º G"},
-  {id:"r32_12",round:"Oitavas",home:"1º L",away:"2º H"},
-  {id:"r32_13",round:"Oitavas",home:"2º I",away:"2º J"},
-  {id:"r32_14",round:"Oitavas",home:"2º K",away:"2º L"},
-  {id:"r32_15",round:"Oitavas",home:"3º A/B/C",away:"3º I/J/K/L"},
-  {id:"r32_16",round:"Oitavas",home:"3º B/E/G",away:"3º H/J/K"},
-  {id:"qf_1",round:"Quartas",home:"TBD",away:"TBD"},
-  {id:"qf_2",round:"Quartas",home:"TBD",away:"TBD"},
-  {id:"qf_3",round:"Quartas",home:"TBD",away:"TBD"},
-  {id:"qf_4",round:"Quartas",home:"TBD",away:"TBD"},
-  {id:"qf_5",round:"Quartas",home:"TBD",away:"TBD"},
-  {id:"qf_6",round:"Quartas",home:"TBD",away:"TBD"},
-  {id:"qf_7",round:"Quartas",home:"TBD",away:"TBD"},
-  {id:"qf_8",round:"Quartas",home:"TBD",away:"TBD"},
-  {id:"sf_1",round:"Semifinal",home:"TBD",away:"TBD"},
-  {id:"sf_2",round:"Semifinal",home:"TBD",away:"TBD"},
-  {id:"sf_3",round:"Semifinal",home:"TBD",away:"TBD"},
-  {id:"sf_4",round:"Semifinal",home:"TBD",away:"TBD"},
-  {id:"3rd",round:"3º Lugar",home:"TBD",away:"TBD"},
-  {id:"final",round:"Final 🏆",home:"TBD",away:"TBD"},
-];
-
-const ALL_MATCHES = [...GROUP_MATCHES, ...KNOCKOUT_MATCHES];
-
-const COPA_START = new Date("2026-06-11T16:00:00-03:00");
-
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-const FLAG = t => FLAGS[t] || "🏳️";
-const fmt = v => `R$ ${v.toLocaleString("pt-BR",{minimumFractionDigits:0})}`;
-
-function matchKickoff(match) {
-  if (!match.date || !match.time) return null;
-  const [d,m] = match.date.split("/");
-  const [hh,mm] = match.time.split(":");
-  return new Date(`2026-${m}-${d}T${hh}:${mm}:00-03:00`);
-}
-function isMatchLocked(match) {
-  const ko = matchKickoff(match);
-  if (!ko) return false;
-  return new Date() >= ko;
-}
-function isCopaStarted() { return new Date() >= COPA_START; }
-function getResult(h,a){ if(h>a)return"home"; if(a>h)return"away"; return"draw"; }
-
-function calcPoints(guess, official) {
-  if (!official||official.home===""||official.away==="") return null;
-  const oh=parseInt(official.home),oa=parseInt(official.away);
-  const gh=parseInt(guess?.home),ga=parseInt(guess?.away);
-  if (isNaN(oh)||isNaN(oa)||isNaN(gh)||isNaN(ga)) return null;
-  if (gh===oh&&ga===oa) return POINTS.exact;
-  const or=getResult(oh,oa),gr=getResult(gh,ga);
-  if (or==="draw"&&gr==="draw") return POINTS.draw;
-  if (or!=="draw"&&gr===or) return POINTS.winner;
-  return 0;
-}
-function calcBonus(guesses, champion, vice) {
-  let b=0;
-  if (champion&&guesses?.champion===champion) b+=POINTS.bonusChampion;
-  if (vice&&guesses?.vice===vice) b+=POINTS.bonusVice;
-  return b;
-}
-function pointsByRound(guesses, results, round) {
-  return ALL_MATCHES.filter(m=>m.round===round).reduce((sum,m)=>{
-    const p=calcPoints(guesses?.[m.id],results[m.id]);
-    return sum+(p??0);
-  },0);
-}
-function totalPoints(guesses, results, champion, vice) {
-  return ROUNDS.reduce((s,r)=>s+pointsByRound(guesses,results,r),0)+calcBonus(guesses,champion,vice);
-}
-function roundWinner(participants, allGuesses, results, round) {
-  const s=participants.map(n=>({name:n,pts:pointsByRound(allGuesses[n],results,round)})).sort((a,b)=>b.pts-a.pts);
-  if (!s.length||s[0].pts===0) return null;
-  return s.filter(x=>x.pts===s[0].pts);
-}
-function isRoundComplete(results, round) {
-  const ms=ALL_MATCHES.filter(m=>m.round===round);
-  return ms.length>0&&ms.every(m=>{const r=results[m.id];return r&&r.home!==""&&r.away!==""&&r.home!==undefined;});
-}
-function calcPool(n) {
-  const total=n*ENTRY_FEE, rp=total*ROUND_POOL_PCT, fp=total*FINAL_POOL_PCT;
-  return {total,roundPool:rp,finalPool:fp,perRound:rp/ROUNDS.length};
+// ── Helpers ───────────────────────────────────────────────────
+function formatarData(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}`;
 }
 
-function resultadosParaObj(arr) {
-  const obj = {};
-  if (!Array.isArray(arr)) return obj;
-  arr.forEach(r => {
-    if (r.jogoId !== undefined && r.jogoId !== "") {
-      obj[r.jogoId] = { home: String(r.golsA ?? ""), away: String(r.golsB ?? "") };
-    }
-  });
-  return obj;
+function medalha(pos) {
+  if (pos === 1) return '🥇';
+  if (pos === 2) return '🥈';
+  if (pos === 3) return '🥉';
+  return `${pos}º`;
 }
 
-function palpitesParaObj(arr) {
-  const obj = {};
-  if (!Array.isArray(arr)) return obj;
-  arr.forEach(p => {
-    if (p.jogoId !== undefined && p.jogoId !== "") {
-      obj[p.jogoId] = { home: String(p.golsA ?? ""), away: String(p.golsB ?? "") };
-    }
-    if (p.campeao) obj.champion = p.campeao;
-    if (p.vice)    obj.vice     = p.vice;
-  });
-  return obj;
+// ── Componente principal ──────────────────────────────────────
+export default function App() {
+  const [tela, setTela] = useState('login'); // login | app | admin
+  const [usuario, setUsuario] = useState(null); // { participanteId, nome }
+  const [abaApp, setAbaApp] = useState('palpites'); // palpites | ranking | final
+  const [config, setConfig] = useState({ bloqueioFinal: false, copaIniciada: false });
+
+  useEffect(() => {
+    // Resgata sessão salva
+    const salvo = localStorage.getItem('bolao_usuario');
+    if (salvo) setUsuario(JSON.parse(salvo));
+
+    // Carrega config
+    api.getConfig().then(r => setConfig({
+      bloqueioFinal: r.bloqueioFinal,
+      copaIniciada: r.copaIniciada,
+    })).catch(() => {});
+  }, []);
+
+  function entrar(u) {
+    setUsuario(u);
+    localStorage.setItem('bolao_usuario', JSON.stringify(u));
+    setTela('app');
+  }
+
+  function sair() {
+    setUsuario(null);
+    localStorage.removeItem('bolao_usuario');
+    setTela('login');
+  }
+
+  if (tela === 'login') return <TelaLogin onEntrar={entrar} onAdmin={() => setTela('admin')} />;
+  if (tela === 'admin') return <TelaAdmin onVoltar={() => setTela('login')} />;
+
+  return (
+    <div className="app-shell">
+      <header className="top-bar">
+        <div className="top-bar-inner">
+          <span className="logo">⚽ Bolão Copa 2026</span>
+          <div className="top-right">
+            <span className="nome-usuario">{usuario.nome}</span>
+            <button className="btn-sair" onClick={sair}>Sair</button>
+          </div>
+        </div>
+        <nav className="nav-tabs">
+          <button className={abaApp === 'palpites' ? 'tab ativa' : 'tab'} onClick={() => setAbaApp('palpites')}>
+            📝 Palpites
+          </button>
+          <button className={abaApp === 'ranking' ? 'tab ativa' : 'tab'} onClick={() => setAbaApp('ranking')}>
+            🏆 Ranking
+          </button>
+          <button className={abaApp === 'final' ? 'tab ativa' : 'tab'} onClick={() => setAbaApp('final')}>
+            🌟 Campeão
+          </button>
+        </nav>
+      </header>
+
+      <main className="main-content">
+        {abaApp === 'palpites' && <TelaPalpites participanteId={usuario.participanteId} />}
+        {abaApp === 'ranking' && <TelaRanking />}
+        {abaApp === 'final' && (
+          <TelaPalpiteFinal
+            participanteId={usuario.participanteId}
+            bloqueado={config.bloqueioFinal}
+          />
+        )}
+      </main>
+    </div>
+  );
 }
 
-// ─── APP ─────────────────────────────────────────────────────────────────────
-export default function BolaoApp() {
-  const [screen, setScreen] = useState("loading");
-  const [participants, setParticipants] = useState([]);
-  const [results, setResults] = useState({});
-  const [allGuesses, setAllGuesses] = useState({});
-  const [currentUser, setCurrentUser] = useState(null);
-  const [myGuesses, setMyGuesses] = useState({});
-  const [officialChampion, setOfficialChampion] = useState("");
-  const [officialVice, setOfficialVice] = useState("");
-  const [newName, setNewName] = useState("");
-  const [newPin, setNewPin] = useState("");
-  const [adminPass, setAdminPass] = useState("");
-  const [activeRound, setActiveRound] = useState("Fase de Grupos");
-  const [toast, setToast] = useState(null);
-  const [roundSummary, setRoundSummary] = useState(null);
-  const [viewingUser, setViewingUser] = useState(null);
-  const [loading, setLoading] = useState(false);
+// ── Tela Login / Cadastro ─────────────────────────────────────
+function TelaLogin({ onEntrar, onAdmin }) {
+  const [modo, setModo] = useState('login'); // login | cadastro
+  const [nome, setNome] = useState('');
+  const [pin, setPin] = useState('');
+  const [erro, setErro] = useState('');
+  const [carregando, setCarregando] = useState(false);
 
-  // Refs para debounce — palpites e resultados admin
-  const guessTimers = useRef({});
-  const resultTimers = useRef({});
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setErro('');
+    if (!nome.trim() || !pin.trim()) { setErro('Preencha nome e PIN'); return; }
+    if (pin.length < 4) { setErro('PIN deve ter ao menos 4 dígitos'); return; }
 
-  const showToast=(msg,type="ok")=>{ setToast({msg,type}); setTimeout(()=>setToast(null),2800); };
-
-  useEffect(()=>{
-    async function load(){
-      try {
-        const [partsArr, resArr, finalRes] = await Promise.all([
-          api.listarParticipantes(),
-          api.getResultados(),
-          api.getResultadoFinal(),
-        ]);
-        const parts = Array.isArray(partsArr) ? partsArr : [];
-        setParticipants(parts);
-        setResults(resultadosParaObj(resArr));
-        setOfficialChampion(finalRes?.campeao || "");
-        setOfficialVice(finalRes?.vice || "");
-
-        const gMap = {};
-        await Promise.all(parts.map(async p => {
-          try {
-            const pArr = await api.getPalpites(p.id);
-            const pfArr = await api.getPalpitesFinal();
-            const meuFinal = Array.isArray(pfArr) ? pfArr.find(x => x.participanteId === p.id) : null;
-            const obj = palpitesParaObj(pArr);
-            if (meuFinal) { obj.champion = meuFinal.campeao; obj.vice = meuFinal.vice; }
-            gMap[p.id] = obj;
-          } catch {}
-        }));
-        setAllGuesses(gMap);
-
-        try {
-          const saved = localStorage.getItem("bolao-session");
-          if (saved) {
-            const s = JSON.parse(saved);
-            const found = parts.find(p => p.id === s.id);
-            if (found) {
-              setCurrentUser(found);
-              setMyGuesses(gMap[found.id] || {});
-              setScreen("home");
-              return;
-            }
-          }
-        } catch {}
-      } catch (e) {
-        console.error("Erro ao carregar:", e);
-      }
-      setScreen("splash");
-    }
-    load();
-  },[]);
-
-  // ── Salvar palpite com debounce por jogo ──────────────────────────────────
-  const handleGuessChange=(matchId,side,val)=>{
-    const updated={...myGuesses,[matchId]:{...(myGuesses[matchId]||{}),[side]:val}};
-    setMyGuesses(updated);
-    setAllGuesses(prev=>({...prev,[currentUser.id]:updated}));
-
-    if (guessTimers.current[matchId]) clearTimeout(guessTimers.current[matchId]);
-    guessTimers.current[matchId] = setTimeout(async () => {
-      const g = updated[matchId] || {};
-      const golsA = g.home ?? "";
-      const golsB = g.away ?? "";
-      if (golsA === "" || golsB === "") return; // só salva quando os dois campos estão preenchidos
-      try {
-        await api.salvarPalpite(currentUser.id, matchId, golsA, golsB);
-      } catch(e) { console.error("Erro ao salvar palpite:", e); }
-    }, 800);
-  };
-
-  // ── Login / Cadastro ───────────────────────────────────────────────────────
-  const handleJoin=async()=>{
-    const name=newName.trim();
-    const pin=newPin.trim();
-    if(!name) return showToast("Digite seu nome","err");
-    if(!pin||pin.length<4) return showToast("PIN deve ter pelo menos 4 dígitos","err");
-    setLoading(true);
+    setCarregando(true);
     try {
-      const existing = participants.find(p => p.nome.toLowerCase() === name.toLowerCase());
-      let user;
-      if (existing) {
-        user = await api.autenticar(name, pin);
+      let res;
+      if (modo === 'login') {
+        res = await api.login(nome.trim(), pin);
       } else {
-        user = await api.criarParticipante(name, pin);
-        const newParts = await api.listarParticipantes();
-        setParticipants(Array.isArray(newParts) ? newParts : []);
+        res = await api.cadastrar(nome.trim(), pin);
       }
-      setCurrentUser(user);
-      const pArr = await api.getPalpites(user.id);
-      const pfArr = await api.getPalpitesFinal();
-      const meuFinal = Array.isArray(pfArr) ? pfArr.find(x => x.participanteId === user.id) : null;
-      const obj = palpitesParaObj(pArr);
-      if (meuFinal) { obj.champion = meuFinal.campeao; obj.vice = meuFinal.vice; }
-      setMyGuesses(obj);
-      setAllGuesses(prev => ({...prev, [user.id]: obj}));
-      localStorage.setItem("bolao-session", JSON.stringify(user));
-      setScreen("home");
-      showToast(existing ? `Bem-vindo de volta, ${user.nome}!` : `Bem-vindo ao bolão, ${user.nome}! 🎉`);
-    } catch(e) {
-      showToast(e.message || "Erro ao entrar","err");
+      onEntrar({ participanteId: res.participanteId, nome: res.nome });
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setCarregando(false);
     }
-    setLoading(false);
-  };
+  }
 
-  const handleLogout=()=>{
-    localStorage.removeItem("bolao-session");
-    setCurrentUser(null); setMyGuesses({}); setScreen("splash");
-  };
+  return (
+    <div className="login-wrapper">
+      <div className="login-card">
+        <div className="login-hero">
+          <span className="login-emoji">⚽</span>
+          <h1 className="login-titulo">Bolão Copa 2026</h1>
+          <p className="login-sub">EUA • México • Canadá</p>
+        </div>
 
-  // ── Admin: salvar resultado com debounce por jogo ─────────────────────────
-  const handleResultChange=(matchId,side,val)=>{
-    const updated={...results,[matchId]:{...(results[matchId]||{}),[side]:val}};
-    setResults(updated);
+        <div className="login-toggle">
+          <button className={modo === 'login' ? 'toggle-btn ativo' : 'toggle-btn'} onClick={() => setModo('login')}>
+            Entrar
+          </button>
+          <button className={modo === 'cadastro' ? 'toggle-btn ativo' : 'toggle-btn'} onClick={() => setModo('cadastro')}>
+            Cadastrar
+          </button>
+        </div>
 
-    if (resultTimers.current[matchId]) clearTimeout(resultTimers.current[matchId]);
-    resultTimers.current[matchId] = setTimeout(async () => {
-      const r = updated[matchId] || {};
-      const golsA = r.home ?? "";
-      const golsB = r.away ?? "";
-      if (golsA === "" || golsB === "") return; // só salva quando os dois campos estão preenchidos
-      try {
-        await api.salvarResultado(adminPass, matchId, golsA, golsB);
-      } catch(e) { console.error("Erro ao salvar resultado:", e); }
-    }, 800);
-  };
+        <form onSubmit={handleSubmit} className="login-form">
+          <div className="campo">
+            <label>Nome</label>
+            <input
+              type="text"
+              value={nome}
+              onChange={e => setNome(e.target.value)}
+              placeholder="Como você quer ser chamado"
+              autoComplete="off"
+            />
+          </div>
+          <div className="campo">
+            <label>PIN (4+ dígitos)</label>
+            <input
+              type="password"
+              inputMode="numeric"
+              value={pin}
+              onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
+              placeholder="••••"
+              maxLength={8}
+            />
+          </div>
 
-  const handleChampionChange=async(field,val)=>{
-    const champ = field==="champion" ? val : officialChampion;
-    const vic   = field==="vice"     ? val : officialVice;
-    if(field==="champion") setOfficialChampion(val); else setOfficialVice(val);
+          {erro && <p className="erro-msg">{erro}</p>}
+
+          <button type="submit" className="btn-principal" disabled={carregando}>
+            {carregando ? 'Aguarde...' : modo === 'login' ? 'Entrar' : 'Cadastrar'}
+          </button>
+        </form>
+
+        <button className="btn-admin-link" onClick={onAdmin}>🔐 Área Admin</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Tela Palpites ─────────────────────────────────────────────
+function TelaPalpites({ participanteId }) {
+  const [jogos, setJogos] = useState([]);
+  const [resultados, setResultados] = useState({});
+  const [palpites, setPalpites] = useState({}); // { jogoId: { casa, visitante } }
+  const [salvando, setSalvando] = useState({});
+  const [msgs, setMsgs] = useState({});
+  const [carregando, setCarregando] = useState(true);
+  const [faseAtiva, setFaseAtiva] = useState('');
+
+  useEffect(() => {
+    Promise.all([
+      api.getJogos(),
+      api.getPalpites(participanteId),
+      api.getResultados(),
+    ]).then(([rJogos, rPalpites, rResultados]) => {
+      setJogos(rJogos.jogos || []);
+      if (rJogos.jogos?.length) setFaseAtiva(rJogos.jogos[0].fase);
+
+      // Indexa palpites por jogoId
+      const mapa = {};
+      (rPalpites.palpites || []).forEach(p => {
+        mapa[p.jogoId] = { casa: String(p.golsCasa), visitante: String(p.golsVisitante) };
+      });
+      setPalpites(mapa);
+
+      // Indexa resultados por jogoId
+      const mapRes = {};
+      (rResultados.resultados || []).forEach(r => {
+        mapRes[r.jogoId] = { casa: r.golsCasa, visitante: r.golsVisitante };
+      });
+      setResultados(mapRes);
+    }).catch(console.error).finally(() => setCarregando(false));
+  }, [participanteId]);
+
+  function handleChange(jogoId, campo, val) {
+    const limpo = val.replace(/\D/g, '').slice(0, 2);
+    setPalpites(prev => ({
+      ...prev,
+      [jogoId]: { ...prev[jogoId], [campo]: limpo }
+    }));
+  }
+
+  async function handleBlur(jogoId) {
+    const p = palpites[jogoId] || {};
+    // Só salva quando os dois campos estão preenchidos (evita duplicatas)
+    if (p.casa === '' || p.casa === undefined || p.visitante === '' || p.visitante === undefined) return;
+
+    setSalvando(s => ({ ...s, [jogoId]: true }));
     try {
-      await api.salvarResultadoFinal(adminPass, champ, vic);
-    } catch(e) { console.error(e); }
-  };
+      await api.salvarPalpite(participanteId, jogoId, Number(p.casa), Number(p.visitante));
+      setMsgs(m => ({ ...m, [jogoId]: '✓' }));
+      setTimeout(() => setMsgs(m => ({ ...m, [jogoId]: '' })), 2000);
+    } catch (err) {
+      setMsgs(m => ({ ...m, [jogoId]: '✗ Erro' }));
+    } finally {
+      setSalvando(s => ({ ...s, [jogoId]: false }));
+    }
+  }
 
-  const openRoundSummary=(round)=>{
-    const data=participants.map(p=>{
-      const pts=pointsByRound(allGuesses[p.id],results,round);
-      const exactCount=ALL_MATCHES.filter(m=>m.round===round&&calcPoints(allGuesses[p.id]?.[m.id],results[m.id])===POINTS.exact).length;
-      return {name:p.nome,pts,exactCount};
-    }).sort((a,b)=>b.pts-a.pts||b.exactCount-a.exactCount);
-    setRoundSummary({round,data});
-  };
+  if (carregando) return <Loader />;
 
-  const pool=calcPool(participants.length||10);
-  const ranking=participants.map(p=>({
-    id: p.id,
-    name: p.nome,
-    pts:totalPoints(allGuesses[p.id],results,officialChampion,officialVice),
-    exact:Object.entries(allGuesses[p.id]||{}).filter(([id,g])=>calcPoints(g,results[id])===POINTS.exact).length,
-    bonus:calcBonus(allGuesses[p.id],officialChampion,officialVice),
-  })).sort((a,b)=>b.pts-a.pts||b.exact-a.exact);
+  const fases = [...new Set(jogos.map(j => j.fase))];
 
-  // ── SCREENS ────────────────────────────────────────────────────────────────
-  if(screen==="loading") return(
-    <div style={S.page}><div style={S.splashBg}/>
-      <div style={S.center}><div style={S.bigBall}>⚽</div><p style={{color:"#889",marginTop:"1rem"}}>Carregando...</p></div>
+  return (
+    <div className="palpites-wrapper">
+      <div className="fases-nav">
+        {fases.map(f => (
+          <button
+            key={f}
+            className={faseAtiva === f ? 'fase-btn ativa' : 'fase-btn'}
+            onClick={() => setFaseAtiva(f)}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+
+      <div className="jogos-lista">
+        {jogos.filter(j => j.fase === faseAtiva).map(jogo => {
+          const p = palpites[jogo.id] || { casa: '', visitante: '' };
+          const res = resultados[jogo.id];
+          const temResultado = res !== undefined;
+
+          return (
+            <div key={jogo.id} className={`jogo-card ${temResultado ? 'encerrado' : ''}`}>
+              <div className="jogo-data">{formatarData(jogo.data)}</div>
+              <div className="jogo-times">
+                <span className="time-nome">{jogo.casa}</span>
+                <div className="placar-inputs">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0" max="99"
+                    value={p.casa}
+                    onChange={e => handleChange(jogo.id, 'casa', e.target.value)}
+                    onBlur={() => handleBlur(jogo.id)}
+                    disabled={temResultado}
+                    className="placar-input"
+                    placeholder="–"
+                  />
+                  <span className="placar-x">×</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0" max="99"
+                    value={p.visitante}
+                    onChange={e => handleChange(jogo.id, 'visitante', e.target.value)}
+                    onBlur={() => handleBlur(jogo.id)}
+                    disabled={temResultado}
+                    className="placar-input"
+                    placeholder="–"
+                  />
+                </div>
+                <span className="time-nome">{jogo.visitante}</span>
+              </div>
+
+              {temResultado && (
+                <div className="resultado-real">
+                  Resultado: {res.casa} × {res.visitante}
+                </div>
+              )}
+
+              <div className="jogo-status">
+                {salvando[jogo.id] ? '💾' : msgs[jogo.id] || ''}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
+}
 
-  if(screen==="splash") return(
-    <div style={S.page}><div style={S.splashBg}/>
-      <div style={S.splashContent}>
-        <div style={S.bigBall}>⚽</div>
-        <h1 style={S.splashTitle}>BOLÃO<br/>DA COPA</h1>
-        <p style={S.splashYear}>2026</p>
-        <button style={S.btnGreen} onClick={()=>setScreen("login")}>Entrar no Bolão</button>
-        <button style={S.btnGhost} onClick={()=>setScreen("ranking")}>Ver Ranking</button>
-        <button style={S.btnGhost} onClick={()=>setScreen("premios")}>Ver Premiação</button>
-        <button style={S.btnMuted} onClick={()=>setScreen("admin_login")}>🔐 Admin</button>
-      </div>
-    </div>
-  );
+// ── Tela Ranking ──────────────────────────────────────────────
+function TelaRanking() {
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(true);
 
-  if(screen==="login") return(
-    <div style={S.page}><div style={S.splashBg}/>
-      <div style={S.card}>
-        <h2 style={S.cardTitle}>⚽ Entrar no Bolão</h2>
-        <p style={S.cardSub}>Digite seu nome e crie um PIN de 4+ dígitos</p>
-        <p style={{...S.cardSub,fontSize:"0.78rem",color:"#667",marginTop:"-0.5rem"}}>Novo? Seu PIN será criado. Já tem conta? Use seu PIN cadastrado.</p>
-        <input style={S.input} placeholder="Seu nome..." value={newName} onChange={e=>setNewName(e.target.value)}/>
-        <input
-          style={S.input}
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          placeholder="PIN (mín. 4 dígitos)..."
-          value={newPin}
-          onChange={e=>setNewPin(e.target.value.replace(/\D/g,""))}
-          onKeyDown={e=>e.key==="Enter"&&handleJoin()}
-        />
-        <button style={S.btnGreen} onClick={handleJoin} disabled={loading}>{loading?"Entrando...":"Entrar"}</button>
-        <button style={S.btnGhost} onClick={()=>setScreen("splash")}>Voltar</button>
-        {participants.length>0&&<p style={S.hint}>Já no bolão: {participants.map(p=>p.nome).join(", ")}</p>}
-      </div>
-      {toast&&<Toast t={toast}/>}
-    </div>
-  );
+  useEffect(() => {
+    api.getRanking()
+      .then(setDados)
+      .catch(console.error)
+      .finally(() => setCarregando(false));
+  }, []);
 
-  if(screen==="admin_login") return(
-    <div style={S.page}><div style={S.splashBg}/>
-      <div style={S.card}>
-        <h2 style={S.cardTitle}>🔐 Admin</h2>
-        <input style={S.input} type="password" placeholder="Senha..." value={adminPass}
-          onChange={e=>setAdminPass(e.target.value)}
-          onKeyDown={e=>{ if(e.key==="Enter"){ if(adminPass===ADMIN_PASSWORD){setScreen("admin");showToast("Modo admin ativado ⚙️")}else showToast("Senha incorreta","err")}}}/>
-        <button style={S.btnGreen} onClick={()=>{ if(adminPass===ADMIN_PASSWORD){setScreen("admin");showToast("Modo admin ativado")}else showToast("Senha incorreta","err")}}>Entrar</button>
-        <button style={S.btnGhost} onClick={()=>setScreen("splash")}>Voltar</button>
-      </div>
-      {toast&&<Toast t={toast}/>}
-    </div>
-  );
+  if (carregando) return <Loader />;
+  if (!dados) return <p className="vazio">Não foi possível carregar o ranking.</p>;
 
-  if(screen==="home"){
-    const myPts=totalPoints(myGuesses,results,officialChampion,officialVice);
-    const myRank=ranking.findIndex(r=>r.id===currentUser?.id)+1;
-    const pending=ALL_MATCHES.filter(m=>!isMatchLocked(m)&&(!myGuesses[m.id]?.home&&myGuesses[m.id]?.home!==0)).length;
-    const actualPool=calcPool(participants.length);
-    return(
-      <div style={S.page}>
-        <Header title="⚽ Bolão da Copa" right={<button style={S.logoutBtn} onClick={handleLogout}>Sair</button>}/>
-        <div style={S.scroll}>
-          <div style={S.heroCard}>
-            <div style={S.heroEmoji}>⚽</div>
-            <div style={S.heroName}>{currentUser?.nome}</div>
-            <div style={S.heroStats}>
-              <StatBox num={myPts} label="pontos"/>
-              <StatBox num={`${myRank}º`} label="lugar"/>
-              <StatBox num={ALL_MATCHES.length-pending} label="palpites"/>
-            </div>
-          </div>
-          <div style={S.poolBanner}>
-            <div style={S.poolTitle}>💰 Vaquinha atual</div>
-            <div style={S.poolTotal}>{fmt(actualPool.total)}</div>
-            <div style={S.poolSplit}>
-              <span>🏅 Rodadas: <b>{fmt(actualPool.roundPool)}</b></span>
-              <span>🏆 Final: <b>{fmt(actualPool.finalPool)}</b></span>
-            </div>
-            <div style={S.poolNote}>{participants.length} participante{participants.length!==1?"s":""} × R$ {ENTRY_FEE}</div>
-          </div>
-          <div style={S.menuGrid}>
-            <MenuCard icon="🎯" label="Meus Palpites" sub={`${pending} abertos`} onClick={()=>setScreen("palpites")}/>
-            <MenuCard icon="🏆" label="Ranking" sub={`${participants.length} jogadores`} onClick={()=>setScreen("ranking")}/>
-            <MenuCard icon="💰" label="Premiação" sub="por rodada e final" onClick={()=>setScreen("premios")}/>
-            <MenuCard icon="👥" label="Palpites do Grupo" sub="ver o que cada um apostou" onClick={()=>setScreen("grupo")}/>
-            <MenuCard icon="📊" label="Rodadas" sub="pontos por fase" onClick={()=>setScreen("rodadas")}/>
-            <MenuCard icon="📋" label="Regras" sub="pontuação e desempate" onClick={()=>setScreen("regras")}/>
-          </div>
+  const { ranking, premioTotal, premioRodadas, premioCampeao, totalParticipantes } = dados;
+
+  return (
+    <div className="ranking-wrapper">
+      <div className="premio-banner">
+        <div className="premio-item">
+          <span className="premio-label">Prêmio Total</span>
+          <span className="premio-valor">R$ {premioTotal?.toLocaleString('pt-BR')}</span>
         </div>
-        {toast&&<Toast t={toast}/>}
-      </div>
-    );
-  }
-
-  if(screen==="palpites"){
-    const filtered=ALL_MATCHES.filter(m=>m.round===activeRound);
-    const copaStarted=isCopaStarted();
-    return(
-      <div style={S.page}>
-        <Header title="Meus Palpites" left={<BtnBack onClick={()=>setScreen("home")}/>}/>
-        <RoundTabs active={activeRound} onChange={setActiveRound}/>
-        <div style={S.scroll}>
-          {filtered.map(match=>{
-            const g=myGuesses[match.id]||{};
-            const res=results[match.id]||{};
-            const pts=calcPoints(g,res);
-            const hasRes=res.home!==undefined&&res.home!==""&&res.away!==undefined&&res.away!=="";
-            const locked=isMatchLocked(match);
-            return(
-              <div key={match.id} style={{...S.matchCard,...(pts===POINTS.exact?S.mExact:pts>0&&hasRes?S.mResult:pts===0&&hasRes?S.mWrong:locked&&!hasRes?S.mLocked:{})}}>
-                {match.group&&<div style={S.matchGroup}>Grupo {match.group}{match.date?` · ${match.date} ${match.time}`:""}</div>}
-                {locked&&!hasRes&&<div style={S.lockBadge}>🔒 Encerrado</div>}
-                {hasRes&&<div style={S.badge}>{pts===POINTS.exact?"🎯 +5":pts===POINTS.winner?"✅ +2":pts===POINTS.draw?"🤝 +2":"❌ 0"}</div>}
-                <div style={S.matchRow}>
-                  <div style={S.teamLbl}>{FLAG(match.home)} {match.home}</div>
-                  <div style={S.scoreRow}>
-                    <input style={{...S.scoreIn,...(locked?S.scoreDisabled:{})}} type="number" min="0" max="20"
-                      value={g.home??""} disabled={locked}
-                      onChange={e=>!locked&&handleGuessChange(match.id,"home",e.target.value)}/>
-                    <span style={S.vsX}>×</span>
-                    <input style={{...S.scoreIn,...(locked?S.scoreDisabled:{})}} type="number" min="0" max="20"
-                      value={g.away??""} disabled={locked}
-                      onChange={e=>!locked&&handleGuessChange(match.id,"away",e.target.value)}/>
-                  </div>
-                  <div style={S.teamLbl}>{FLAG(match.away)} {match.away}</div>
-                </div>
-                {hasRes&&<div style={S.official}>Resultado oficial: {res.home} × {res.away}</div>}
-              </div>
-            );
-          })}
-          <div style={{...S.bonusCard,...(copaStarted?S.bonusLocked:{})}}>
-            <div style={S.bonusTitle}>🏆 Bônus — Campeão & Vice</div>
-            {copaStarted&&<div style={S.lockBadge}>🔒 Copa já começou — palpites encerrados</div>}
-            <div style={S.bonusRow}>
-              <div style={S.bonusLabel}>🥇 Campeão <span style={S.bonusPts}>+5 pts</span></div>
-              <select style={{...S.bonusSel,...(copaStarted?{opacity:0.5,pointerEvents:"none"}:{})}}
-                value={myGuesses.champion||""} disabled={copaStarted}
-                onChange={async e=>{
-                  if(copaStarted) return;
-                  const upd={...myGuesses,champion:e.target.value};
-                  setMyGuesses(upd);
-                  setAllGuesses(prev=>({...prev,[currentUser.id]:upd}));
-                  try { await api.salvarPalpiteFinal(currentUser.id, e.target.value, myGuesses.vice||""); } catch {}
-                }}>
-                <option value="">-- Escolha --</option>
-                {ALL_TEAMS.map(t=><option key={t} value={t}>{FLAG(t)} {t}</option>)}
-              </select>
-            </div>
-            <div style={S.bonusRow}>
-              <div style={S.bonusLabel}>🥈 Vice <span style={S.bonusPts}>+3 pts</span></div>
-              <select style={{...S.bonusSel,...(copaStarted?{opacity:0.5,pointerEvents:"none"}:{})}}
-                value={myGuesses.vice||""} disabled={copaStarted}
-                onChange={async e=>{
-                  if(copaStarted) return;
-                  const upd={...myGuesses,vice:e.target.value};
-                  setMyGuesses(upd);
-                  setAllGuesses(prev=>({...prev,[currentUser.id]:upd}));
-                  try { await api.salvarPalpiteFinal(currentUser.id, myGuesses.champion||"", e.target.value); } catch {}
-                }}>
-                <option value="">-- Escolha --</option>
-                {ALL_TEAMS.map(t=><option key={t} value={t}>{FLAG(t)} {t}</option>)}
-              </select>
-            </div>
-          </div>
+        <div className="premio-item">
+          <span className="premio-label">🏆 Campeão (70%)</span>
+          <span className="premio-valor">R$ {premioCampeao?.toLocaleString('pt-BR')}</span>
         </div>
-        <div style={S.autoSave}>💾 Salvamento automático · Palpites bloqueiam no início de cada jogo</div>
-        {toast&&<Toast t={toast}/>}
-      </div>
-    );
-  }
-
-  if(screen==="ranking"){
-    const medals=["🥇","🥈","🥉"];
-    return(
-      <div style={S.page}>
-        <Header title="🏆 Ranking Geral" left={<BtnBack onClick={()=>setScreen(currentUser?"home":"splash")}/>}/>
-        <div style={S.scroll}>
-          {ranking.length===0&&<div style={S.empty}>Nenhum participante ainda</div>}
-          {ranking.map((p,i)=>(
-            <div key={p.id} style={{...S.rankCard,...(p.id===currentUser?.id?S.rankMe:{})}}>
-              <div style={S.rankPos}>{medals[i]||`${i+1}º`}</div>
-              <div style={S.rankName}>{p.name}{p.id===currentUser?.id?" (você)":""}</div>
-              <div style={S.rankRight}>
-                <div style={S.rankPts}>{p.pts}<span style={S.rankPtsLbl}> pts</span></div>
-                <div style={S.rankSub}>{p.exact} exatos{p.bonus>0?` · +${p.bonus} bônus`:""}</div>
-              </div>
-            </div>
-          ))}
-          {!currentUser&&<div style={{padding:"1rem"}}><button style={S.btnGreen} onClick={()=>setScreen("login")}>Participar do Bolão</button></div>}
+        <div className="premio-item">
+          <span className="premio-label">📅 Rodadas (30%)</span>
+          <span className="premio-valor">R$ {premioRodadas?.toLocaleString('pt-BR')}</span>
         </div>
       </div>
-    );
-  }
 
-  if(screen==="premios"){
-    const actualPool=calcPool(participants.length||10);
-    return(
-      <div style={S.page}>
-        <Header title="💰 Premiação" left={<BtnBack onClick={()=>setScreen(currentUser?"home":"splash")}/>}/>
-        <div style={S.scroll}>
-          <div style={S.poolBig}>
-            <div style={S.poolBigLabel}>Prêmio total estimado</div>
-            <div style={S.poolBigNum}>{fmt(actualPool.total)}</div>
-            <div style={S.poolBigSub}>{participants.length||10} pessoas × R$ {ENTRY_FEE}</div>
+      <div className="ranking-lista">
+        {ranking.map(p => (
+          <div key={p.participanteId} className={`ranking-row pos-${p.posicao}`}>
+            <span className="ranking-pos">{medalha(p.posicao)}</span>
+            <span className="ranking-nome">{p.nome}</span>
+            <span className="ranking-pts">{p.totalPontos} pts</span>
           </div>
-          <div style={S.premioSection}>
-            <div style={S.premioSectionTitle}>🏅 Prêmio por Rodada <span style={S.premioSectionSub}>(30% da vaquinha)</span></div>
-            <div style={S.premioSectionDesc}>Quem fizer mais pontos na rodada leva {fmt(actualPool.perRound)}</div>
-            {ROUNDS.map(round=>{
-              const complete=isRoundComplete(results,round);
-              const winners=complete?roundWinner(participants.map(p=>p.id),allGuesses,results,round):null;
-              const winnerNames=winners?winners.map(w=>participants.find(p=>p.id===w.name)?.nome||w.name).join(", "):null;
-              const prizeEach=winners?actualPool.perRound/winners.length:actualPool.perRound;
-              const isGrupos=round==="Fase de Grupos";
-              return(
-                <div key={round} style={{...S.premioRound,...(isGrupos&&complete&&winners?S.premioRoundDestaque:{})}}>
-                  <div style={S.premioRoundLeft}>
-                    <div style={S.premioRoundName}>{round}</div>
-                    {complete&&winners&&(
-                      <>
-                        <div style={S.premioWinner}>
-                          🏅 {winnerNames} ({winners[0].pts} pts)
-                          {winners.length===1
-                            ? ` · recebe ${fmt(prizeEach)}`
-                            : ` · dividem ${fmt(actualPool.perRound)} (${fmt(prizeEach)} cada)`}
-                        </div>
-                        {isGrupos&&(
-                          <div style={S.premioPixBadge}>
-                            💸 Pagar via Pix: <b>{fmt(prizeEach)}</b>
-                            {winners.length>1?` para cada um dos ${winners.length} vencedores`:""}
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {complete&&!winners&&<div style={S.premioNoWinner}>Sem pontos</div>}
-                    {!complete&&<div style={S.premioStatus}>Em andamento</div>}
-                  </div>
-                  <div style={S.premioRoundPrize}>{fmt(actualPool.perRound)}</div>
-                </div>
-              );
-            })}
-          </div>
-          <div style={S.premioSection}>
-            <div style={S.premioSectionTitle}>🏆 Prêmio Final <span style={S.premioSectionSub}>(70% da vaquinha)</span></div>
-            <div style={S.premioSectionDesc}>Quem tiver mais pontos no total ao fim do torneio</div>
-            <div style={S.premioFinal}>
-              <div style={S.premioFinalNum}>{fmt(actualPool.finalPool)}</div>
-              {ranking.length>0&&<div style={S.premioFinalLider}>Líder atual: 🥇 {ranking[0].name} ({ranking[0].pts} pts)</div>}
-            </div>
-          </div>
-          <div style={S.premioNote}>ℹ️ Em empate na rodada, o prêmio é dividido igualmente.</div>
-        </div>
-      </div>
-    );
-  }
-
-  if(screen==="grupo"){
-    return(
-      <div style={S.page}>
-        <Header title="👥 Palpites do Grupo" left={<BtnBack onClick={()=>setScreen("home")}/>}/>
-        <div style={S.scroll}>
-          <p style={{color:"#889",fontSize:"0.82rem",textAlign:"center",marginBottom:"0.5rem"}}>Palpites visíveis apenas para jogos já iniciados</p>
-          {participants.map(p=>(
-            <button key={p.id} style={{...S.rankCard,cursor:"pointer",width:"100%",textAlign:"left"}}
-              onClick={()=>{setViewingUser(p);setScreen("ver_palpites");}}>
-              <div style={S.rankPos}>⚽</div>
-              <div style={S.rankName}>{p.nome}{p.id===currentUser?.id?" (você)":""}</div>
-              <div style={S.rankRight}>
-                <div style={S.rankPts}>{totalPoints(allGuesses[p.id],results,officialChampion,officialVice)}<span style={S.rankPtsLbl}> pts</span></div>
-                <div style={S.rankSub}>ver palpites →</div>
-              </div>
-            </button>
-          ))}
-          {participants.length===0&&<div style={S.empty}>Nenhum participante ainda</div>}
-        </div>
-      </div>
-    );
-  }
-
-  if(screen==="ver_palpites"&&viewingUser){
-    const theirGuesses=allGuesses[viewingUser.id]||{};
-    const filtered=ALL_MATCHES.filter(m=>m.round===activeRound&&isMatchLocked(m));
-    return(
-      <div style={S.page}>
-        <Header title={`Palpites de ${viewingUser.nome}`} left={<BtnBack onClick={()=>setScreen("grupo")}/>}/>
-        <RoundTabs active={activeRound} onChange={setActiveRound}/>
-        <div style={S.scroll}>
-          {filtered.length===0&&<div style={S.empty}>Nenhum jogo encerrado nesta fase ainda</div>}
-          {filtered.map(match=>{
-            const g=theirGuesses[match.id]||{};
-            const res=results[match.id]||{};
-            const pts=calcPoints(g,res);
-            const hasRes=res.home!==undefined&&res.home!==""&&res.away!==undefined&&res.away!=="";
-            return(
-              <div key={match.id} style={{...S.matchCard,...(pts===POINTS.exact?S.mExact:pts>0&&hasRes?S.mResult:pts===0&&hasRes?S.mWrong:{})}}>
-                {match.group&&<div style={S.matchGroup}>Grupo {match.group} · {match.date} {match.time}</div>}
-                {hasRes&&<div style={S.badge}>{pts===POINTS.exact?"🎯 +5":pts===POINTS.winner?"✅ +2":pts===POINTS.draw?"🤝 +2":"❌ 0"}</div>}
-                <div style={S.matchRow}>
-                  <div style={S.teamLbl}>{FLAG(match.home)} {match.home}</div>
-                  <div style={S.scoreRow}>
-                    <div style={S.scoreShow}>{g.home??"-"}</div>
-                    <span style={S.vsX}>×</span>
-                    <div style={S.scoreShow}>{g.away??"-"}</div>
-                  </div>
-                  <div style={S.teamLbl}>{FLAG(match.away)} {match.away}</div>
-                </div>
-                {hasRes&&<div style={S.official}>Resultado oficial: {res.home} × {res.away}</div>}
-              </div>
-            );
-          })}
-          {isCopaStarted()&&(
-            <div style={S.bonusCard}>
-              <div style={S.bonusTitle}>🏆 Bônus apostados</div>
-              <div style={S.bonusRow}>
-                <div style={S.bonusLabel}>🥇 Campeão</div>
-                <div style={{...S.bonusSel,padding:"0.5rem",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"0.5rem",color:"#fff",flex:1.5}}>
-                  {theirGuesses.champion?`${FLAG(theirGuesses.champion)} ${theirGuesses.champion}`:"Não apostou"}
-                  {officialChampion&&theirGuesses.champion===officialChampion&&" 🎯 +5"}
-                </div>
-              </div>
-              <div style={S.bonusRow}>
-                <div style={S.bonusLabel}>🥈 Vice</div>
-                <div style={{...S.bonusSel,padding:"0.5rem",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"0.5rem",color:"#fff",flex:1.5}}>
-                  {theirGuesses.vice?`${FLAG(theirGuesses.vice)} ${theirGuesses.vice}`:"Não apostou"}
-                  {officialVice&&theirGuesses.vice===officialVice&&" 🎯 +3"}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if(screen==="rodadas"){
-    return(
-      <div style={S.page}>
-        <Header title="📊 Pontos por Rodada" left={<BtnBack onClick={()=>setScreen("home")}/>}/>
-        <div style={S.scroll}>
-          {ROUNDS.map(round=>{
-            const complete=isRoundComplete(results,round);
-            const scores=participants.map(p=>({id:p.id,name:p.nome,pts:pointsByRound(allGuesses[p.id],results,round)})).sort((a,b)=>b.pts-a.pts);
-            return(
-              <div key={round} style={S.rodadaCard}>
-                <div style={S.rodadaHeader}>
-                  <span style={S.rodadaName}>{round}</span>
-                  <div style={{display:"flex",gap:"0.5rem",alignItems:"center"}}>
-                    <span style={complete?S.rodadaDone:S.rodadaPending}>{complete?"✅ Encerrada":"⏳ Em andamento"}</span>
-                    {complete&&<button style={S.resumoBtn} onClick={()=>openRoundSummary(round)}>Ver resumo</button>}
-                  </div>
-                </div>
-                {scores.map((s,i)=>(
-                  <div key={s.id} style={S.rodadaRow}>
-                    <span style={S.rodadaRank}>{i+1}º</span>
-                    <span style={{...S.rodadaName2,...(s.id===currentUser?.id?{color:"#f0c040"}:{})}}>{s.name}{s.id===currentUser?.id?" ★":""}</span>
-                    <span style={S.rodadaPts}>{s.pts} pts</span>
-                  </div>
-                ))}
-                {scores.length===0&&<div style={S.empty}>Sem participantes</div>}
-              </div>
-            );
-          })}
-        </div>
-        {roundSummary&&(
-          <div style={S.modalOverlay} onClick={()=>setRoundSummary(null)}>
-            <div style={S.modal} onClick={e=>e.stopPropagation()}>
-              <div style={S.modalTitle}>📊 Resumo — {roundSummary.round}</div>
-              {roundSummary.data.map((d,i)=>(
-                <div key={d.name} style={S.modalRow}>
-                  <span style={S.rodadaRank}>{i+1}º</span>
-                  <span style={S.rankName}>{d.name}</span>
-                  <span style={S.rankPts}>{d.pts} pts</span>
-                  <span style={{fontSize:"0.75rem",color:"#889",marginLeft:"0.5rem"}}>{d.exactCount} exatos</span>
-                </div>
-              ))}
-              <button style={{...S.btnGhost,marginTop:"1rem"}} onClick={()=>setRoundSummary(null)}>Fechar</button>
-            </div>
-          </div>
+        ))}
+        {ranking.length === 0 && (
+          <p className="vazio">Nenhum participante ainda.</p>
         )}
       </div>
-    );
+    </div>
+  );
+}
+
+// ── Tela Palpite Final ────────────────────────────────────────
+const SELECOES = [
+  'Brasil', 'Argentina', 'França', 'Espanha', 'Portugal', 'Inglaterra',
+  'Alemanha', 'Holanda', 'Itália', 'EUA', 'México', 'Coreia do Sul',
+  'Japão', 'Marrocos', 'Senegal', 'Austrália', 'Turquia', 'Arábia Saudita',
+  'Costa Rica', 'Gana', 'Tunísia', 'Nova Zelândia', 'Belize', 'Equador',
+];
+
+function TelaPalpiteFinal({ participanteId, bloqueado }) {
+  const [campeao, setCampeao] = useState('');
+  const [vice, setVice] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    api.getPalpiteFinal(participanteId)
+      .then(r => {
+        setCampeao(r.campeao || '');
+        setVice(r.vice || '');
+      })
+      .catch(console.error)
+      .finally(() => setCarregando(false));
+  }, [participanteId]);
+
+  async function salvar() {
+    if (!campeao || !vice) { setMsg('Selecione campeão e vice.'); return; }
+    if (campeao === vice) { setMsg('Campeão e vice não podem ser a mesma seleção.'); return; }
+    setSalvando(true);
+    setMsg('');
+    try {
+      await api.salvarPalpiteFinal(participanteId, campeao, vice);
+      setMsg('✅ Palpite salvo!');
+    } catch (err) {
+      setMsg('❌ ' + err.message);
+    } finally {
+      setSalvando(false);
+    }
   }
 
-  if(screen==="regras") return(
-    <div style={S.page}>
-      <Header title="📋 Regras" left={<BtnBack onClick={()=>setScreen("home")}/>}/>
-      <div style={S.scroll}>
-        <div style={S.ruleCard}>
-          <div style={S.ruleTitle}>⚽ Pontuação por jogo</div>
-          <div style={S.ruleRow}><span>🎯 Placar exato</span><span style={S.pts5}>5 pts</span></div>
-          <div style={S.ruleRow}><span>✅ Vencedor correto</span><span style={S.pts2}>2 pts</span></div>
-          <div style={S.ruleRow}><span>🤝 Empate correto</span><span style={S.pts1}>2 pts</span></div>
-          <div style={S.ruleRow}><span>❌ Erro total</span><span style={{color:"#888"}}>0 pts</span></div>
+  if (carregando) return <Loader />;
+
+  return (
+    <div className="final-wrapper">
+      <div className="final-card">
+        <h2 className="final-titulo">🌟 Palpite Campeão & Vice</h2>
+        <p className="final-info">
+          {bloqueado
+            ? '🔒 A Copa já começou — palpites encerrados.'
+            : 'Estes palpites ficam bloqueados após o início da Copa.'}
+        </p>
+
+        <div className="final-campo">
+          <label>🥇 Campeão</label>
+          <select
+            value={campeao}
+            onChange={e => setCampeao(e.target.value)}
+            disabled={bloqueado}
+          >
+            <option value="">Selecione...</option>
+            {SELECOES.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
         </div>
-        <div style={S.ruleCard}>
-          <div style={S.ruleTitle}>🏆 Bônus campeão & vice</div>
-          <div style={S.ruleRow}><span>🥇 Acertou o campeão</span><span style={S.pts5}>5 pts</span></div>
-          <div style={S.ruleRow}><span>🥈 Acertou o vice</span><span style={S.pts2}>3 pts</span></div>
-          <div style={S.ruleRow}><span style={{fontSize:"0.8rem",color:"#889"}}>Palpite bloqueado no início da Copa (11/06/2026)</span></div>
+
+        <div className="final-campo">
+          <label>🥈 Vice-campeão</label>
+          <select
+            value={vice}
+            onChange={e => setVice(e.target.value)}
+            disabled={bloqueado}
+          >
+            <option value="">Selecione...</option>
+            {SELECOES.filter(s => s !== campeao).map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
         </div>
-        <div style={S.ruleCard}>
-          <div style={S.ruleTitle}>🔒 Bloqueio de palpites</div>
-          <div style={{fontSize:"0.88rem",color:"#bbc",lineHeight:1.6}}>Cada jogo trava automaticamente no horário do seu início (horário de Brasília).</div>
-        </div>
-        <div style={S.ruleCard}>
-          <div style={S.ruleTitle}>💰 Premiação</div>
-          <div style={S.ruleRow}><span>🏅 Prêmio por rodada (30%)</span></div>
-          <div style={{fontSize:"0.82rem",color:"#889",marginBottom:"0.5rem"}}>Maior pontuação na rodada. Em empate, divide igualmente.</div>
-          <div style={S.ruleRow}><span>🏆 Prêmio final (70%)</span></div>
-          <div style={{fontSize:"0.82rem",color:"#889"}}>Maior pontuação total ao fim do torneio.</div>
-        </div>
-        <div style={S.ruleCard}>
-          <div style={S.ruleTitle}>⚖️ Critério de desempate</div>
-          <div style={{fontSize:"0.88rem",color:"#bbc",lineHeight:1.8}}>
-            1º Maior pontuação total<br/>
-            2º Maior nº de placares exatos<br/>
-            3º Maior bônus (campeão/vice)<br/>
-            4º Sorteio entre empatados
-          </div>
+
+        {!bloqueado && (
+          <button className="btn-principal" onClick={salvar} disabled={salvando}>
+            {salvando ? 'Salvando...' : 'Salvar palpite'}
+          </button>
+        )}
+
+        {msg && <p className="final-msg">{msg}</p>}
+
+        <div className="final-regras">
+          <h3>Pontuação bônus</h3>
+          <p>✅ Acertar o campeão = <strong>5 pts</strong></p>
+          <p>✅ Acertar o vice = <strong>3 pts</strong></p>
         </div>
       </div>
     </div>
   );
+}
 
-  if(screen==="admin"){
-    const filtered=ALL_MATCHES.filter(m=>m.round===activeRound);
-    return(
-      <div style={S.page}>
-        <Header title="⚙️ Admin — Resultados" left={<BtnBack onClick={()=>setScreen("splash")}/>}/>
-        <RoundTabs active={activeRound} onChange={setActiveRound}/>
-        <div style={S.scroll}>
-          {filtered.map(match=>{
-            const res=results[match.id]||{};
-            return(
-              <div key={match.id} style={S.matchCard}>
-                {match.group&&<div style={S.matchGroup}>Grupo {match.group}{match.date?` · ${match.date} ${match.time}`:""}</div>}
-                <div style={S.matchRow}>
-                  <div style={S.teamLbl}>{FLAG(match.home)} {match.home}</div>
-                  <div style={S.scoreRow}>
-                    <input style={{...S.scoreIn,...S.scoreAdmin}} type="number" min="0" max="20" value={res.home??""} onChange={e=>handleResultChange(match.id,"home",e.target.value)}/>
-                    <span style={S.vsX}>×</span>
-                    <input style={{...S.scoreIn,...S.scoreAdmin}} type="number" min="0" max="20" value={res.away??""} onChange={e=>handleResultChange(match.id,"away",e.target.value)}/>
-                  </div>
-                  <div style={S.teamLbl}>{FLAG(match.away)} {match.away}</div>
-                </div>
-              </div>
-            );
-          })}
-          <div style={S.bonusCard}>
-            <div style={S.bonusTitle}>🏆 Definir Campeão & Vice (oficial)</div>
-            <div style={S.bonusRow}>
-              <div style={S.bonusLabel}>🥇 Campeão</div>
-              <select style={{...S.bonusSel,...S.scoreAdmin}} value={officialChampion} onChange={e=>handleChampionChange("champion",e.target.value)}>
-                <option value="">-- Selecione --</option>
-                {ALL_TEAMS.map(t=><option key={t} value={t}>{FLAG(t)} {t}</option>)}
-              </select>
+// ── Tela Admin ────────────────────────────────────────────────
+function TelaAdmin({ onVoltar }) {
+  const [logado, setLogado] = useState(false);
+  const [senha, setSenha] = useState('');
+  const [erro, setErro] = useState('');
+  const [jogos, setJogos] = useState([]);
+  const [resultados, setResultados] = useState({});
+  const [jogoSel, setJogoSel] = useState('');
+  const [golsCasa, setGolsCasa] = useState('');
+  const [golsVisitante, setGolsVisitante] = useState('');
+  const [campeao, setCampeao] = useState('');
+  const [vice, setVice] = useState('');
+  const [msg, setMsg] = useState('');
+  const [carregando, setCarregando] = useState(false);
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    setErro('');
+    setCarregando(true);
+    try {
+      await api.adminLogin(senha);
+      setLogado(true);
+      carregarDados();
+    } catch (err) {
+      setErro(err.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  async function carregarDados() {
+    const [rJogos, rRes] = await Promise.all([api.getJogos(), api.getResultados()]);
+    setJogos(rJogos.jogos || []);
+    const mapa = {};
+    (rRes.resultados || []).forEach(r => { mapa[r.jogoId] = r; });
+    setResultados(mapa);
+  }
+
+  async function handleLancar(e) {
+    e.preventDefault();
+    if (!jogoSel || golsCasa === '' || golsVisitante === '') {
+      setMsg('Preencha todos os campos.'); return;
+    }
+    setCarregando(true);
+    setMsg('');
+    try {
+      await api.lancarResultado(senha, jogoSel, Number(golsCasa), Number(golsVisitante));
+      setMsg('✅ Resultado salvo e pontos calculados!');
+      setJogoSel(''); setGolsCasa(''); setGolsVisitante('');
+      carregarDados();
+    } catch (err) {
+      setMsg('❌ ' + err.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  async function handleLancarFinal(e) {
+    e.preventDefault();
+    if (!campeao || !vice) { setMsg('Selecione campeão e vice.'); return; }
+    setCarregando(true);
+    setMsg('');
+    try {
+      await api.lancarResultadoFinal(senha, campeao, vice);
+      setMsg('✅ Resultado final lançado!');
+    } catch (err) {
+      setMsg('❌ ' + err.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  if (!logado) {
+    return (
+      <div className="login-wrapper">
+        <div className="login-card">
+          <h2 className="admin-titulo">🔐 Área Admin</h2>
+          <form onSubmit={handleLogin} className="login-form">
+            <div className="campo">
+              <label>Senha admin</label>
+              <input type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="••••••" />
             </div>
-            <div style={S.bonusRow}>
-              <div style={S.bonusLabel}>🥈 Vice</div>
-              <select style={{...S.bonusSel,...S.scoreAdmin}} value={officialVice} onChange={e=>handleChampionChange("vice",e.target.value)}>
-                <option value="">-- Selecione --</option>
-                {ALL_TEAMS.map(t=><option key={t} value={t}>{FLAG(t)} {t}</option>)}
-              </select>
-            </div>
-          </div>
+            {erro && <p className="erro-msg">{erro}</p>}
+            <button type="submit" className="btn-principal" disabled={carregando}>
+              {carregando ? 'Verificando...' : 'Entrar'}
+            </button>
+          </form>
+          <button className="btn-admin-link" onClick={onVoltar}>← Voltar</button>
         </div>
-        <div style={S.autoSave}>💾 Resultados salvos automaticamente quando os dois campos estão preenchidos</div>
-        {toast&&<Toast t={toast}/>}
       </div>
     );
   }
 
-  return null;
-}
+  return (
+    <div className="admin-wrapper">
+      <div className="admin-header">
+        <h2>⚙️ Painel Admin</h2>
+        <button className="btn-sair" onClick={onVoltar}>Voltar</button>
+      </div>
 
-// ─── SUB-COMPONENTS ──────────────────────────────────────────────────────────
-function Header({title,left,right}){
-  return(
-    <div style={S.header}>
-      <div style={{width:48}}>{left}</div>
-      <div style={S.headerTitle}>{title}</div>
-      <div style={{width:48,textAlign:"right"}}>{right}</div>
+      <div className="admin-secao">
+        <h3>Lançar resultado de jogo</h3>
+        <form onSubmit={handleLancar} className="admin-form">
+          <select value={jogoSel} onChange={e => setJogoSel(e.target.value)}>
+            <option value="">Selecione o jogo...</option>
+            {jogos.map(j => (
+              <option key={j.id} value={j.id}>
+                {j.casa} × {j.visitante} ({j.fase}) {resultados[j.id] ? `✓ ${resultados[j.id].golsCasa}-${resultados[j.id].golsVisitante}` : ''}
+              </option>
+            ))}
+          </select>
+          <div className="admin-placar">
+            <input type="number" min="0" max="99" value={golsCasa}
+              onChange={e => setGolsCasa(e.target.value)} placeholder="Gols casa" />
+            <span>×</span>
+            <input type="number" min="0" max="99" value={golsVisitante}
+              onChange={e => setGolsVisitante(e.target.value)} placeholder="Gols visitante" />
+          </div>
+          <button type="submit" className="btn-principal" disabled={carregando}>
+            {carregando ? 'Salvando...' : 'Lançar resultado'}
+          </button>
+        </form>
+      </div>
+
+      <div className="admin-secao">
+        <h3>Lançar resultado final (campeão e vice)</h3>
+        <form onSubmit={handleLancarFinal} className="admin-form">
+          <select value={campeao} onChange={e => setCampeao(e.target.value)}>
+            <option value="">Campeão...</option>
+            {SELECOES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select value={vice} onChange={e => setVice(e.target.value)}>
+            <option value="">Vice...</option>
+            {SELECOES.filter(s => s !== campeao).map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button type="submit" className="btn-principal" disabled={carregando}>
+            Lançar resultado final
+          </button>
+        </form>
+      </div>
+
+      {msg && <p className="admin-msg">{msg}</p>}
     </div>
   );
 }
-function BtnBack({onClick}){ return <button style={S.backBtn} onClick={onClick}>←</button>; }
-function RoundTabs({active,onChange}){
-  return(
-    <div style={S.tabs}>
-      {ROUNDS.map(r=>(
-        <button key={r} style={{...S.tab,...(active===r?S.tabActive:{})}} onClick={()=>onChange(r)}>
-          {ROUND_LABELS[r]||r}
-        </button>
-      ))}
-    </div>
-  );
-}
-function StatBox({num,label}){
-  return <div style={S.statBox}><div style={S.statNum}>{num}</div><div style={S.statLbl}>{label}</div></div>;
-}
-function MenuCard({icon,label,sub,onClick}){
-  return(
-    <button style={S.menuCard} onClick={onClick}>
-      <div style={S.menuIcon}>{icon}</div>
-      <div style={S.menuLbl}>{label}</div>
-      <div style={S.menuSub}>{sub}</div>
-    </button>
-  );
-}
-function Toast({t}){
-  return <div style={{...S.toast,...(t.type==="err"?S.toastErr:S.toastOk)}}>{t.msg}</div>;
-}
 
-// ─── STYLES ──────────────────────────────────────────────────────────────────
-const S={
-  page:{minHeight:"100vh",background:"#0a1628",color:"#fff",fontFamily:"'Trebuchet MS',sans-serif",position:"relative",overflowX:"hidden"},
-  splashBg:{position:"fixed",inset:0,background:"radial-gradient(ellipse at 30% 20%,#1a3a6e 0%,#0a1628 60%),radial-gradient(ellipse at 80% 80%,#1e5c2e 0%,transparent 50%)",zIndex:0},
-  center:{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh"},
-  splashContent:{position:"relative",zIndex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:"2rem",gap:"0.9rem"},
-  bigBall:{fontSize:"5rem"},
-  splashTitle:{fontSize:"3.5rem",fontWeight:900,letterSpacing:"0.1em",textAlign:"center",lineHeight:1,background:"linear-gradient(135deg,#f0c040,#fff)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:0},
-  splashYear:{fontSize:"1.4rem",color:"#f0c040",margin:"0 0 1rem",letterSpacing:"0.3em"},
-  card:{position:"relative",zIndex:1,background:"rgba(255,255,255,0.07)",backdropFilter:"blur(20px)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:"1.5rem",padding:"2rem",margin:"2rem auto",maxWidth:"420px",display:"flex",flexDirection:"column",gap:"1rem"},
-  cardTitle:{margin:0,fontSize:"1.6rem",fontWeight:800,textAlign:"center"},
-  cardSub:{margin:0,color:"#aab",textAlign:"center",fontSize:"0.9rem"},
-  input:{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:"0.75rem",padding:"0.8rem 1rem",color:"#fff",fontSize:"1rem",outline:"none",width:"100%",boxSizing:"border-box"},
-  hint:{color:"#888",fontSize:"0.8rem",textAlign:"center",margin:0},
-  btnGreen:{background:"linear-gradient(135deg,#1e8a3e,#2db855)",border:"none",borderRadius:"0.75rem",padding:"0.9rem 1.5rem",color:"#fff",fontSize:"1rem",fontWeight:700,cursor:"pointer",width:"100%"},
-  btnGhost:{background:"transparent",border:"1px solid rgba(255,255,255,0.25)",borderRadius:"0.75rem",padding:"0.75rem 1.5rem",color:"#ccc",fontSize:"0.95rem",cursor:"pointer",width:"100%"},
-  btnMuted:{background:"transparent",border:"none",color:"#556",fontSize:"0.85rem",cursor:"pointer",padding:"0.5rem"},
-  header:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"1rem 1.25rem",background:"rgba(255,255,255,0.05)",backdropFilter:"blur(10px)",borderBottom:"1px solid rgba(255,255,255,0.1)",position:"sticky",top:0,zIndex:10},
-  headerTitle:{fontWeight:700,fontSize:"1.05rem",flex:1,textAlign:"center"},
-  backBtn:{background:"none",border:"none",color:"#f0c040",fontSize:"1.4rem",cursor:"pointer",padding:"0.25rem 0.5rem"},
-  logoutBtn:{background:"none",border:"none",color:"#888",fontSize:"0.85rem",cursor:"pointer"},
-  scroll:{padding:"1rem",display:"flex",flexDirection:"column",gap:"0.85rem",paddingBottom:"5rem"},
-  heroCard:{background:"linear-gradient(135deg,#1a3a6e,#0d2240)",border:"1px solid rgba(240,192,64,0.3)",borderRadius:"1.25rem",padding:"1.5rem",textAlign:"center"},
-  heroEmoji:{fontSize:"2.5rem",marginBottom:"0.5rem"},
-  heroName:{fontSize:"1.5rem",fontWeight:800,marginBottom:"1rem"},
-  heroStats:{display:"flex",justifyContent:"space-around"},
-  statBox:{textAlign:"center"},
-  statNum:{fontSize:"2rem",fontWeight:900,color:"#f0c040"},
-  statLbl:{fontSize:"0.75rem",color:"#889",textTransform:"uppercase",letterSpacing:"0.05em"},
-  poolBanner:{background:"rgba(240,192,64,0.08)",border:"1px solid rgba(240,192,64,0.25)",borderRadius:"1rem",padding:"1rem 1.25rem",textAlign:"center"},
-  poolTitle:{fontSize:"0.75rem",color:"#889",textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:"0.25rem"},
-  poolTotal:{fontSize:"2.2rem",fontWeight:900,color:"#f0c040"},
-  poolSplit:{display:"flex",justifyContent:"space-around",fontSize:"0.85rem",margin:"0.5rem 0",color:"#ccc"},
-  poolNote:{fontSize:"0.75rem",color:"#667"},
-  menuGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0.75rem"},
-  menuCard:{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:"1rem",padding:"1.1rem 0.9rem",cursor:"pointer",textAlign:"center",color:"#fff",display:"flex",flexDirection:"column",alignItems:"center",gap:"0.35rem"},
-  menuIcon:{fontSize:"1.8rem"},
-  menuLbl:{fontWeight:700,fontSize:"0.88rem"},
-  menuSub:{fontSize:"0.7rem",color:"#889"},
-  tabs:{display:"flex",gap:"0.5rem",padding:"0.75rem 1rem",overflowX:"auto",borderBottom:"1px solid rgba(255,255,255,0.08)"},
-  tab:{background:"transparent",border:"1px solid rgba(255,255,255,0.15)",borderRadius:"2rem",padding:"0.4rem 0.9rem",color:"#999",fontSize:"0.8rem",cursor:"pointer",whiteSpace:"nowrap"},
-  tabActive:{background:"#f0c040",borderColor:"#f0c040",color:"#0a1628",fontWeight:700},
-  matchCard:{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"1rem",padding:"0.75rem 1rem",position:"relative"},
-  mExact:{background:"rgba(240,192,64,0.1)",borderColor:"rgba(240,192,64,0.5)"},
-  mResult:{background:"rgba(76,175,80,0.08)",borderColor:"rgba(76,175,80,0.4)"},
-  mWrong:{background:"rgba(255,60,60,0.05)",borderColor:"rgba(255,60,60,0.2)"},
-  mLocked:{opacity:0.6},
-  matchGroup:{fontSize:"0.7rem",color:"#889",textTransform:"uppercase",marginBottom:"0.4rem"},
-  lockBadge:{fontSize:"0.75rem",color:"#f0c040",marginBottom:"0.3rem",fontWeight:600},
-  badge:{position:"absolute",top:"0.75rem",right:"0.75rem",fontSize:"0.8rem",fontWeight:700},
-  matchRow:{display:"flex",alignItems:"center",gap:"0.5rem"},
-  teamLbl:{flex:1,fontSize:"0.82rem",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},
-  scoreRow:{display:"flex",alignItems:"center",gap:"0.35rem",flexShrink:0},
-  scoreIn:{width:"2.5rem",height:"2.5rem",textAlign:"center",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:"0.5rem",color:"#fff",fontSize:"1.1rem",fontWeight:700,outline:"none"},
-  scoreDisabled:{opacity:0.4,cursor:"not-allowed",background:"rgba(255,255,255,0.04)"},
-  scoreShow:{width:"2.5rem",height:"2.5rem",display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(255,255,255,0.07)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:"0.5rem",fontSize:"1.1rem",fontWeight:700,color:"#fff"},
-  scoreAdmin:{borderColor:"#f0c040",background:"rgba(240,192,64,0.1)"},
-  vsX:{color:"#666",fontSize:"0.9rem"},
-  official:{marginTop:"0.4rem",fontSize:"0.75rem",color:"#889",textAlign:"center"},
-  autoSave:{textAlign:"center",padding:"0.75rem",color:"#556",fontSize:"0.75rem"},
-  rankCard:{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:"1rem",padding:"0.9rem 1.1rem",display:"flex",alignItems:"center",gap:"0.75rem"},
-  rankMe:{background:"rgba(240,192,64,0.1)",borderColor:"rgba(240,192,64,0.4)"},
-  rankPos:{fontSize:"1.5rem",width:"2rem",textAlign:"center"},
-  rankName:{flex:1,fontWeight:600,fontSize:"0.95rem"},
-  rankRight:{textAlign:"right"},
-  rankPts:{fontSize:"1.3rem",fontWeight:900,color:"#f0c040"},
-  rankPtsLbl:{fontSize:"0.7rem",color:"#889"},
-  rankSub:{fontSize:"0.75rem",color:"#889"},
-  empty:{textAlign:"center",color:"#556",padding:"2rem"},
-  poolBig:{background:"linear-gradient(135deg,#1a3a6e,#0d2240)",border:"1px solid rgba(240,192,64,0.3)",borderRadius:"1.25rem",padding:"1.5rem",textAlign:"center"},
-  poolBigLabel:{fontSize:"0.8rem",color:"#889",textTransform:"uppercase",letterSpacing:"0.05em"},
-  poolBigNum:{fontSize:"3rem",fontWeight:900,color:"#f0c040",margin:"0.25rem 0"},
-  poolBigSub:{fontSize:"0.85rem",color:"#889"},
-  premioSection:{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"1rem",padding:"1rem",display:"flex",flexDirection:"column",gap:"0.6rem"},
-  premioSectionTitle:{fontWeight:800,fontSize:"1rem"},
-  premioSectionSub:{fontWeight:400,color:"#889",fontSize:"0.85rem"},
-  premioSectionDesc:{fontSize:"0.82rem",color:"#aab",marginBottom:"0.25rem"},
-  premioRound:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0.6rem 0",borderTop:"1px solid rgba(255,255,255,0.06)"},
-  premioRoundDestaque:{background:"rgba(240,192,64,0.07)",borderRadius:"0.75rem",padding:"0.75rem",borderTop:"none",marginTop:"0.25rem",border:"1px solid rgba(240,192,64,0.2)"},
-  premioRoundLeft:{flex:1},
-  premioRoundName:{fontWeight:600,fontSize:"0.9rem"},
-  premioWinner:{fontSize:"0.78rem",color:"#f0c040",marginTop:"0.2rem"},
-  premioNoWinner:{fontSize:"0.78rem",color:"#889",marginTop:"0.2rem"},
-  premioStatus:{fontSize:"0.78rem",color:"#556",marginTop:"0.2rem"},
-  premioRoundPrize:{fontWeight:700,color:"#f0c040",fontSize:"0.95rem"},
-  premioPixBadge:{marginTop:"0.5rem",background:"rgba(46,204,113,0.12)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:"0.5rem",padding:"0.4rem 0.6rem",fontSize:"0.82rem",color:"#2ecc71"},
-  premioFinal:{background:"rgba(240,192,64,0.08)",border:"1px solid rgba(240,192,64,0.2)",borderRadius:"0.75rem",padding:"1rem",textAlign:"center",marginTop:"0.25rem"},
-  premioFinalNum:{fontSize:"2.2rem",fontWeight:900,color:"#f0c040"},
-  premioFinalLider:{fontSize:"0.85rem",color:"#ccc",marginTop:"0.4rem"},
-  premioNote:{fontSize:"0.78rem",color:"#667",textAlign:"center",padding:"0.5rem 0"},
-  bonusCard:{background:"rgba(240,192,64,0.07)",border:"1px solid rgba(240,192,64,0.25)",borderRadius:"1rem",padding:"1rem 1.25rem",display:"flex",flexDirection:"column",gap:"0.75rem"},
-  bonusLocked:{opacity:0.7},
-  bonusTitle:{fontWeight:800,fontSize:"0.95rem",color:"#f0c040"},
-  bonusRow:{display:"flex",alignItems:"center",gap:"0.75rem"},
-  bonusLabel:{flex:1,fontSize:"0.88rem",fontWeight:600},
-  bonusPts:{color:"#f0c040",fontWeight:700,marginLeft:"0.4rem"},
-  // fix: cor do texto do select forçada para branco
-  bonusSel:{flex:1.5,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:"0.5rem",padding:"0.5rem",color:"#fff",fontSize:"0.85rem",outline:"none",WebkitTextFillColor:"#fff"},
-  rodadaCard:{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"1rem",padding:"1rem",display:"flex",flexDirection:"column",gap:"0.4rem"},
-  rodadaHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"0.4rem",flexWrap:"wrap",gap:"0.3rem"},
-  rodadaName:{fontWeight:700,fontSize:"0.95rem"},
-  rodadaDone:{fontSize:"0.75rem",color:"#4caf50"},
-  rodadaPending:{fontSize:"0.75rem",color:"#889"},
-  rodadaRow:{display:"flex",alignItems:"center",gap:"0.5rem",padding:"0.3rem 0",borderTop:"1px solid rgba(255,255,255,0.05)"},
-  rodadaRank:{fontSize:"0.8rem",color:"#889",width:"1.5rem"},
-  rodadaName2:{flex:1,fontSize:"0.88rem",fontWeight:600},
-  rodadaPts:{fontSize:"0.88rem",fontWeight:700,color:"#f0c040"},
-  resumoBtn:{background:"rgba(240,192,64,0.15)",border:"1px solid rgba(240,192,64,0.3)",borderRadius:"1rem",padding:"0.2rem 0.6rem",color:"#f0c040",fontSize:"0.75rem",cursor:"pointer"},
-  ruleCard:{background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:"1rem",padding:"1rem 1.25rem",display:"flex",flexDirection:"column",gap:"0.5rem"},
-  ruleTitle:{fontWeight:800,fontSize:"0.95rem",marginBottom:"0.25rem"},
-  ruleRow:{display:"flex",justifyContent:"space-between",fontSize:"0.88rem",padding:"0.2rem 0"},
-  pts5:{color:"#f0c040",fontWeight:700},
-  pts2:{color:"#4caf50",fontWeight:700},
-  pts1:{color:"#64b5f6",fontWeight:700},
-  modalOverlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:"1rem"},
-  modal:{background:"#1a2a45",border:"1px solid rgba(255,255,255,0.15)",borderRadius:"1.25rem",padding:"1.5rem",width:"100%",maxWidth:"400px",display:"flex",flexDirection:"column",gap:"0.5rem"},
-  modalTitle:{fontWeight:800,fontSize:"1.1rem",marginBottom:"0.5rem",textAlign:"center"},
-  modalRow:{display:"flex",alignItems:"center",gap:"0.5rem",padding:"0.4rem 0",borderTop:"1px solid rgba(255,255,255,0.06)"},
-  toast:{position:"fixed",bottom:"1.5rem",left:"50%",transform:"translateX(-50%)",padding:"0.75rem 1.5rem",borderRadius:"2rem",fontSize:"0.9rem",fontWeight:600,zIndex:100,whiteSpace:"nowrap"},
-  toastOk:{background:"#1e8a3e",color:"#fff"},
-  toastErr:{background:"#c0392b",color:"#fff"},
-};
+// ── Loader ────────────────────────────────────────────────────
+function Loader() {
+  return <div className="loader">⚽ Carregando...</div>;
+}
