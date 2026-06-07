@@ -1,8 +1,31 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import * as api from './api';
 
 // ── Constantes ────────────────────────────────────────────────
-const SENHA_ADMIN = 'copa2026'; // deve bater com a aba config no Sheets
+
+// 48 seleções classificadas para a Copa 2026
+const SELECOES = [
+  'África do Sul', 'Alemanha', 'Argélia', 'Argentina', 'Arábia Saudita',
+  'Austrália', 'Áustria', 'Bélgica', 'Bósnia e Herzegovina', 'Brasil',
+  'Canadá', 'Cabo Verde', 'Catar', 'Colômbia', 'Coreia do Sul',
+  'Costa do Marfim', 'Croácia', 'Curaçau', 'Egito', 'Equador',
+  'Escócia', 'Espanha', 'Estados Unidos', 'França', 'Gana',
+  'Haiti', 'Holanda', 'Inglaterra', 'Iraque', 'Irã',
+  'Japão', 'Jordânia', 'Marrocos', 'México', 'Nova Zelândia',
+  'Noruega', 'Panamá', 'Paraguai', 'Portugal', 'RD Congo',
+  'Senegal', 'Suécia', 'Suíça', 'Tchéquia', 'Tunísia',
+  'Turquia', 'Uruguai', 'Uzbequistão',
+].sort();
+
+// Fases eliminatórias disponíveis para o admin adicionar
+const FASES_EXTRA = [
+  'Fase de 16',
+  'Oitavas de Final',
+  'Quartas de Final',
+  'Semifinal',
+  'Disputa 3º Lugar',
+  'Final',
+];
 
 // ── Helpers ───────────────────────────────────────────────────
 function formatarData(iso) {
@@ -18,19 +41,19 @@ function medalha(pos) {
   return `${pos}º`;
 }
 
-// ── Componente principal ──────────────────────────────────────
+// ── App principal ─────────────────────────────────────────────
 export default function App() {
-  const [tela, setTela] = useState('login'); // login | app | admin
-  const [usuario, setUsuario] = useState(null); // { participanteId, nome }
-  const [abaApp, setAbaApp] = useState('palpites'); // palpites | ranking | final
+  const [tela, setTela] = useState('login');
+  const [usuario, setUsuario] = useState(null);
+  const [abaApp, setAbaApp] = useState('palpites');
   const [config, setConfig] = useState({ bloqueioFinal: false, copaIniciada: false });
 
   useEffect(() => {
-    // Resgata sessão salva
     const salvo = localStorage.getItem('bolao_usuario');
-    if (salvo) setUsuario(JSON.parse(salvo));
-
-    // Carrega config
+    if (salvo) {
+      setUsuario(JSON.parse(salvo));
+      setTela('app');
+    }
     api.getConfig().then(r => setConfig({
       bloqueioFinal: r.bloqueioFinal,
       copaIniciada: r.copaIniciada,
@@ -77,8 +100,8 @@ export default function App() {
 
       <main className="main-content">
         {abaApp === 'palpites' && <TelaPalpites participanteId={usuario.participanteId} />}
-        {abaApp === 'ranking' && <TelaRanking />}
-        {abaApp === 'final' && (
+        {abaApp === 'ranking'  && <TelaRanking />}
+        {abaApp === 'final'    && (
           <TelaPalpiteFinal
             participanteId={usuario.participanteId}
             bloqueado={config.bloqueioFinal}
@@ -91,7 +114,7 @@ export default function App() {
 
 // ── Tela Login / Cadastro ─────────────────────────────────────
 function TelaLogin({ onEntrar, onAdmin }) {
-  const [modo, setModo] = useState('login'); // login | cadastro
+  const [modo, setModo] = useState('login');
   const [nome, setNome] = useState('');
   const [pin, setPin] = useState('');
   const [erro, setErro] = useState('');
@@ -105,12 +128,9 @@ function TelaLogin({ onEntrar, onAdmin }) {
 
     setCarregando(true);
     try {
-      let res;
-      if (modo === 'login') {
-        res = await api.login(nome.trim(), pin);
-      } else {
-        res = await api.cadastrar(nome.trim(), pin);
-      }
+      const res = modo === 'login'
+        ? await api.login(nome.trim(), pin)
+        : await api.cadastrar(nome.trim(), pin);
       onEntrar({ participanteId: res.participanteId, nome: res.nome });
     } catch (err) {
       setErro(err.message);
@@ -177,7 +197,7 @@ function TelaLogin({ onEntrar, onAdmin }) {
 function TelaPalpites({ participanteId }) {
   const [jogos, setJogos] = useState([]);
   const [resultados, setResultados] = useState({});
-  const [palpites, setPalpites] = useState({}); // { jogoId: { casa, visitante } }
+  const [palpites, setPalpites] = useState({});
   const [salvando, setSalvando] = useState({});
   const [msgs, setMsgs] = useState({});
   const [carregando, setCarregando] = useState(true);
@@ -189,17 +209,16 @@ function TelaPalpites({ participanteId }) {
       api.getPalpites(participanteId),
       api.getResultados(),
     ]).then(([rJogos, rPalpites, rResultados]) => {
-      setJogos(rJogos.jogos || []);
-      if (rJogos.jogos?.length) setFaseAtiva(rJogos.jogos[0].fase);
+      const listaJogos = rJogos.jogos || [];
+      setJogos(listaJogos);
+      if (listaJogos.length) setFaseAtiva(listaJogos[0].fase);
 
-      // Indexa palpites por jogoId
       const mapa = {};
       (rPalpites.palpites || []).forEach(p => {
         mapa[p.jogoId] = { casa: String(p.golsCasa), visitante: String(p.golsVisitante) };
       });
       setPalpites(mapa);
 
-      // Indexa resultados por jogoId
       const mapRes = {};
       (rResultados.resultados || []).forEach(r => {
         mapRes[r.jogoId] = { casa: r.golsCasa, visitante: r.golsVisitante };
@@ -218,7 +237,6 @@ function TelaPalpites({ participanteId }) {
 
   async function handleBlur(jogoId) {
     const p = palpites[jogoId] || {};
-    // Só salva quando os dois campos estão preenchidos (evita duplicatas)
     if (p.casa === '' || p.casa === undefined || p.visitante === '' || p.visitante === undefined) return;
 
     setSalvando(s => ({ ...s, [jogoId]: true }));
@@ -287,7 +305,7 @@ function TelaPalpites({ participanteId }) {
                     placeholder="–"
                   />
                 </div>
-                <span className="time-nome">{jogo.visitante}</span>
+                <span className="time-nome visitante">{jogo.visitante}</span>
               </div>
 
               {temResultado && (
@@ -297,7 +315,7 @@ function TelaPalpites({ participanteId }) {
               )}
 
               <div className="jogo-status">
-                {salvando[jogo.id] ? '💾' : msgs[jogo.id] || ''}
+                {salvando[jogoId] ? '💾' : msgs[jogo.id] || ''}
               </div>
             </div>
           );
@@ -313,16 +331,13 @@ function TelaRanking() {
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
-    api.getRanking()
-      .then(setDados)
-      .catch(console.error)
-      .finally(() => setCarregando(false));
+    api.getRanking().then(setDados).catch(console.error).finally(() => setCarregando(false));
   }, []);
 
   if (carregando) return <Loader />;
   if (!dados) return <p className="vazio">Não foi possível carregar o ranking.</p>;
 
-  const { ranking, premioTotal, premioRodadas, premioCampeao, totalParticipantes } = dados;
+  const { ranking, premioTotal, premioRodadas, premioCampeao } = dados;
 
   return (
     <div className="ranking-wrapper">
@@ -349,22 +364,13 @@ function TelaRanking() {
             <span className="ranking-pts">{p.totalPontos} pts</span>
           </div>
         ))}
-        {ranking.length === 0 && (
-          <p className="vazio">Nenhum participante ainda.</p>
-        )}
+        {ranking.length === 0 && <p className="vazio">Nenhum participante ainda.</p>}
       </div>
     </div>
   );
 }
 
 // ── Tela Palpite Final ────────────────────────────────────────
-const SELECOES = [
-  'Brasil', 'Argentina', 'França', 'Espanha', 'Portugal', 'Inglaterra',
-  'Alemanha', 'Holanda', 'Itália', 'EUA', 'México', 'Coreia do Sul',
-  'Japão', 'Marrocos', 'Senegal', 'Austrália', 'Turquia', 'Arábia Saudita',
-  'Costa Rica', 'Gana', 'Tunísia', 'Nova Zelândia', 'Belize', 'Equador',
-];
-
 function TelaPalpiteFinal({ participanteId, bloqueado }) {
   const [campeao, setCampeao] = useState('');
   const [vice, setVice] = useState('');
@@ -374,17 +380,14 @@ function TelaPalpiteFinal({ participanteId, bloqueado }) {
 
   useEffect(() => {
     api.getPalpiteFinal(participanteId)
-      .then(r => {
-        setCampeao(r.campeao || '');
-        setVice(r.vice || '');
-      })
+      .then(r => { setCampeao(r.campeao || ''); setVice(r.vice || ''); })
       .catch(console.error)
       .finally(() => setCarregando(false));
   }, [participanteId]);
 
   async function salvar() {
     if (!campeao || !vice) { setMsg('Selecione campeão e vice.'); return; }
-    if (campeao === vice) { setMsg('Campeão e vice não podem ser a mesma seleção.'); return; }
+    if (campeao === vice) { setMsg('Campeão e vice não podem ser iguais.'); return; }
     setSalvando(true);
     setMsg('');
     try {
@@ -411,29 +414,17 @@ function TelaPalpiteFinal({ participanteId, bloqueado }) {
 
         <div className="final-campo">
           <label>🥇 Campeão</label>
-          <select
-            value={campeao}
-            onChange={e => setCampeao(e.target.value)}
-            disabled={bloqueado}
-          >
+          <select value={campeao} onChange={e => setCampeao(e.target.value)} disabled={bloqueado}>
             <option value="">Selecione...</option>
-            {SELECOES.map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
+            {SELECOES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
 
         <div className="final-campo">
           <label>🥈 Vice-campeão</label>
-          <select
-            value={vice}
-            onChange={e => setVice(e.target.value)}
-            disabled={bloqueado}
-          >
+          <select value={vice} onChange={e => setVice(e.target.value)} disabled={bloqueado}>
             <option value="">Selecione...</option>
-            {SELECOES.filter(s => s !== campeao).map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
+            {SELECOES.filter(s => s !== campeao).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
 
@@ -460,15 +451,8 @@ function TelaAdmin({ onVoltar }) {
   const [logado, setLogado] = useState(false);
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
-  const [jogos, setJogos] = useState([]);
-  const [resultados, setResultados] = useState({});
-  const [jogoSel, setJogoSel] = useState('');
-  const [golsCasa, setGolsCasa] = useState('');
-  const [golsVisitante, setGolsVisitante] = useState('');
-  const [campeao, setCampeao] = useState('');
-  const [vice, setVice] = useState('');
-  const [msg, setMsg] = useState('');
   const [carregando, setCarregando] = useState(false);
+  const [abaAdmin, setAbaAdmin] = useState('resultados'); // resultados | jogos
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -477,51 +461,8 @@ function TelaAdmin({ onVoltar }) {
     try {
       await api.adminLogin(senha);
       setLogado(true);
-      carregarDados();
     } catch (err) {
       setErro(err.message);
-    } finally {
-      setCarregando(false);
-    }
-  }
-
-  async function carregarDados() {
-    const [rJogos, rRes] = await Promise.all([api.getJogos(), api.getResultados()]);
-    setJogos(rJogos.jogos || []);
-    const mapa = {};
-    (rRes.resultados || []).forEach(r => { mapa[r.jogoId] = r; });
-    setResultados(mapa);
-  }
-
-  async function handleLancar(e) {
-    e.preventDefault();
-    if (!jogoSel || golsCasa === '' || golsVisitante === '') {
-      setMsg('Preencha todos os campos.'); return;
-    }
-    setCarregando(true);
-    setMsg('');
-    try {
-      await api.lancarResultado(senha, jogoSel, Number(golsCasa), Number(golsVisitante));
-      setMsg('✅ Resultado salvo e pontos calculados!');
-      setJogoSel(''); setGolsCasa(''); setGolsVisitante('');
-      carregarDados();
-    } catch (err) {
-      setMsg('❌ ' + err.message);
-    } finally {
-      setCarregando(false);
-    }
-  }
-
-  async function handleLancarFinal(e) {
-    e.preventDefault();
-    if (!campeao || !vice) { setMsg('Selecione campeão e vice.'); return; }
-    setCarregando(true);
-    setMsg('');
-    try {
-      await api.lancarResultadoFinal(senha, campeao, vice);
-      setMsg('✅ Resultado final lançado!');
-    } catch (err) {
-      setMsg('❌ ' + err.message);
     } finally {
       setCarregando(false);
     }
@@ -555,6 +496,75 @@ function TelaAdmin({ onVoltar }) {
         <button className="btn-sair" onClick={onVoltar}>Voltar</button>
       </div>
 
+      <div className="login-toggle" style={{ marginBottom: 0 }}>
+        <button className={abaAdmin === 'resultados' ? 'toggle-btn ativo' : 'toggle-btn'} onClick={() => setAbaAdmin('resultados')}>
+          Resultados
+        </button>
+        <button className={abaAdmin === 'jogos' ? 'toggle-btn ativo' : 'toggle-btn'} onClick={() => setAbaAdmin('jogos')}>
+          + Jogos extras
+        </button>
+      </div>
+
+      {abaAdmin === 'resultados' && <AdminResultados senha={senha} />}
+      {abaAdmin === 'jogos'      && <AdminJogosExtras senha={senha} />}
+    </div>
+  );
+}
+
+// ── Admin — Resultados ────────────────────────────────────────
+function AdminResultados({ senha }) {
+  const [jogos, setJogos] = useState([]);
+  const [resultados, setResultados] = useState({});
+  const [jogoSel, setJogoSel] = useState('');
+  const [golsCasa, setGolsCasa] = useState('');
+  const [golsVisitante, setGolsVisitante] = useState('');
+  const [campeao, setCampeao] = useState('');
+  const [vice, setVice] = useState('');
+  const [msg, setMsg] = useState('');
+  const [carregando, setCarregando] = useState(false);
+
+  useEffect(() => { carregarDados(); }, []);
+
+  async function carregarDados() {
+    const [rJogos, rRes] = await Promise.all([api.getJogos(), api.getResultados()]);
+    setJogos(rJogos.jogos || []);
+    const mapa = {};
+    (rRes.resultados || []).forEach(r => { mapa[r.jogoId] = r; });
+    setResultados(mapa);
+  }
+
+  async function handleLancar(e) {
+    e.preventDefault();
+    if (!jogoSel || golsCasa === '' || golsVisitante === '') { setMsg('Preencha todos os campos.'); return; }
+    setCarregando(true); setMsg('');
+    try {
+      await api.lancarResultado(senha, jogoSel, Number(golsCasa), Number(golsVisitante));
+      setMsg('✅ Resultado salvo e pontos calculados!');
+      setJogoSel(''); setGolsCasa(''); setGolsVisitante('');
+      carregarDados();
+    } catch (err) {
+      setMsg('❌ ' + err.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  async function handleLancarFinal(e) {
+    e.preventDefault();
+    if (!campeao || !vice) { setMsg('Selecione campeão e vice.'); return; }
+    setCarregando(true); setMsg('');
+    try {
+      await api.lancarResultadoFinal(senha, campeao, vice);
+      setMsg('✅ Resultado final lançado!');
+    } catch (err) {
+      setMsg('❌ ' + err.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  return (
+    <>
       <div className="admin-secao">
         <h3>Lançar resultado de jogo</h3>
         <form onSubmit={handleLancar} className="admin-form">
@@ -562,16 +572,16 @@ function TelaAdmin({ onVoltar }) {
             <option value="">Selecione o jogo...</option>
             {jogos.map(j => (
               <option key={j.id} value={j.id}>
-                {j.casa} × {j.visitante} ({j.fase}) {resultados[j.id] ? `✓ ${resultados[j.id].golsCasa}-${resultados[j.id].golsVisitante}` : ''}
+                [{j.fase}] {j.casa} × {j.visitante} {resultados[j.id] ? `✓ ${resultados[j.id].golsCasa}-${resultados[j.id].golsVisitante}` : ''}
               </option>
             ))}
           </select>
           <div className="admin-placar">
             <input type="number" min="0" max="99" value={golsCasa}
-              onChange={e => setGolsCasa(e.target.value)} placeholder="Gols casa" />
+              onChange={e => setGolsCasa(e.target.value)} placeholder="Casa" />
             <span>×</span>
             <input type="number" min="0" max="99" value={golsVisitante}
-              onChange={e => setGolsVisitante(e.target.value)} placeholder="Gols visitante" />
+              onChange={e => setGolsVisitante(e.target.value)} placeholder="Visitante" />
           </div>
           <button type="submit" className="btn-principal" disabled={carregando}>
             {carregando ? 'Salvando...' : 'Lançar resultado'}
@@ -580,7 +590,7 @@ function TelaAdmin({ onVoltar }) {
       </div>
 
       <div className="admin-secao">
-        <h3>Lançar resultado final (campeão e vice)</h3>
+        <h3>Lançar campeão e vice-campeão</h3>
         <form onSubmit={handleLancarFinal} className="admin-form">
           <select value={campeao} onChange={e => setCampeao(e.target.value)}>
             <option value="">Campeão...</option>
@@ -595,6 +605,93 @@ function TelaAdmin({ onVoltar }) {
           </button>
         </form>
       </div>
+
+      {msg && <p className="admin-msg">{msg}</p>}
+    </>
+  );
+}
+
+// ── Admin — Jogos Extras ──────────────────────────────────────
+function AdminJogosExtras({ senha }) {
+  const [fase, setFase] = useState('');
+  const [casa, setCasa] = useState('');
+  const [visitante, setVisitante] = useState('');
+  const [data, setData] = useState('');
+  const [msg, setMsg] = useState('');
+  const [carregando, setCarregando] = useState(false);
+
+  // Gera ID automático baseado na fase e times
+  function gerarIdJogo() {
+    const prefixo = fase.replace(/\s+/g, '').substring(0, 3).toUpperCase();
+    const sufixo = Date.now().toString().slice(-4);
+    return `${prefixo}${sufixo}`;
+  }
+
+  async function handleAdicionar(e) {
+    e.preventDefault();
+    if (!fase || !casa || !visitante || !data) { setMsg('Preencha todos os campos.'); return; }
+    if (casa === visitante) { setMsg('Os dois times não podem ser iguais.'); return; }
+
+    setCarregando(true); setMsg('');
+    try {
+      const id = gerarIdJogo();
+      await api.adicionarJogo(senha, id, fase, casa, visitante, data);
+      setMsg(`✅ Jogo adicionado! (${casa} × ${visitante})`);
+      setCasa(''); setVisitante(''); setData('');
+    } catch (err) {
+      setMsg('❌ ' + err.message);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  return (
+    <div className="admin-secao">
+      <h3>Adicionar jogo eliminatório</h3>
+      <p className="admin-info">
+        Use para adicionar jogos das fases eliminatórias conforme os confrontos forem definidos.
+        Os jogos aparecerão automaticamente na tela de palpites para todos.
+      </p>
+      <form onSubmit={handleAdicionar} className="admin-form">
+        <div className="campo">
+          <label>Fase</label>
+          <select value={fase} onChange={e => setFase(e.target.value)}>
+            <option value="">Selecione a fase...</option>
+            {FASES_EXTRA.map(f => <option key={f} value={f}>{f}</option>)}
+          </select>
+        </div>
+
+        <div className="campo">
+          <label>Data do jogo</label>
+          <input
+            type="date"
+            value={data}
+            onChange={e => setData(e.target.value)}
+            min="2026-06-28"
+            max="2026-07-19"
+          />
+        </div>
+
+        <div className="campo">
+          <label>Time 1 (mandante)</label>
+          <select value={casa} onChange={e => setCasa(e.target.value)}>
+            <option value="">Selecione...</option>
+            {SELECOES.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+
+        <div className="campo">
+          <label>Time 2 (visitante)</label>
+          <select value={visitante} onChange={e => setVisitante(e.target.value)}>
+            <option value="">Selecione...</option>
+            {SELECOES.filter(s => s !== casa).map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+
+        <button type="submit" className="btn-principal" disabled={carregando}>
+          {carregando ? 'Adicionando...' : 'Adicionar jogo'}
+        </button>
+      </form>
 
       {msg && <p className="admin-msg">{msg}</p>}
     </div>

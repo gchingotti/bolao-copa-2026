@@ -98,3 +98,7 @@ export async function lancarResultado(senha, jogoId, golsCasa, golsVisitante) {
 export async function lancarResultadoFinal(senha, campeao, vice) {
   return post('lancarResultadoFinal', { senha, campeao, vice });
 }
+
+export async function adicionarJogo(senha, id, fase, casa, visitante, data) {
+  return post('adicionarJogo', { senha, id, fase, casa, visitante, data });
+}
