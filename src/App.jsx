@@ -358,11 +358,11 @@ function TelaRanking() {
           <span className="premio-valor">R$ {premioTotal?.toLocaleString('pt-BR')}</span>
         </div>
         <div className="premio-item">
-          <span className="premio-label">🏆 Campeão (70%)</span>
+          <span className="premio-label">🏆 Campeão (50%)</span>
           <span className="premio-valor">R$ {premioCampeao?.toLocaleString('pt-BR')}</span>
         </div>
         <div className="premio-item">
-          <span className="premio-label">📅 Rodadas (30%)</span>
+          <span className="premio-label">📅 Rodadas (50%)</span>
           <span className="premio-valor">R$ {premioRodadas?.toLocaleString('pt-BR')}</span>
         </div>
       </div>
