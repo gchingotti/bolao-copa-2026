@@ -6,5 +6,5 @@ import react from '@vitejs/plugin-react'
 // Ex: se for github.com/gabriel/copa, mude para '/copa/'
 export default defineConfig({
   plugins: [react()],
-  base: '/bolao-copa2026/',
+  base: '/bolao-copa-2026/',
 })
