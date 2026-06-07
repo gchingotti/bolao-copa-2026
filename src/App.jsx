@@ -30,8 +30,19 @@ const FASES_EXTRA = [
 // ── Helpers ───────────────────────────────────────────────────
 function formatarData(iso) {
   if (!iso) return '';
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}`;
+  // Garante que é string (jogos extras podem vir como Date do Sheets)
+  const str = String(iso).trim();
+  // Formato ISO: 2026-06-28
+  if (str.includes('-')) {
+    const [y, m, d] = str.split('-');
+    return `${d}/${m}`;
+  }
+  // Formato DD/MM/YYYY
+  if (str.includes('/')) {
+    const partes = str.split('/');
+    return `${partes[0]}/${partes[1]}`;
+  }
+  return str;
 }
 
 function medalha(pos) {
