@@ -315,7 +315,7 @@ function TelaPalpites({ participanteId }) {
               )}
 
               <div className="jogo-status">
-                {salvando[jogoId] ? '💾' : msgs[jogo.id] || ''}
+                {salvando[jogo.id] ? '💾' : msgs[jogo.id] || ''}
               </div>
             </div>
           );
