@@ -3,21 +3,19 @@ import * as api from './api';
 
 // ── Constantes ────────────────────────────────────────────────
 
-// 48 seleções classificadas para a Copa 2026
 const SELECOES = [
   'África do Sul', 'Alemanha', 'Argélia', 'Argentina', 'Arábia Saudita',
   'Austrália', 'Áustria', 'Bélgica', 'Bósnia e Herzegovina', 'Brasil',
   'Canadá', 'Cabo Verde', 'Catar', 'Colômbia', 'Coreia do Sul',
-  'Costa do Marfim', 'Croácia', 'Curaçau', 'Egito', 'Equador',
+  'Costa do Marfim', 'Croácia', 'Curaçao', 'Egito', 'Equador',
   'Escócia', 'Espanha', 'Estados Unidos', 'França', 'Gana',
   'Haiti', 'Holanda', 'Inglaterra', 'Iraque', 'Irã',
   'Japão', 'Jordânia', 'Marrocos', 'México', 'Nova Zelândia',
   'Noruega', 'Panamá', 'Paraguai', 'Portugal', 'RD Congo',
-  'Senegal', 'Suécia', 'Suíça', 'Tchéquia', 'Tunísia',
+  'República Tcheca', 'Senegal', 'Suécia', 'Suíça', 'Tunísia',
   'Turquia', 'Uruguai', 'Uzbequistão',
 ].sort();
 
-// Fases eliminatórias disponíveis para o admin adicionar
 const FASES_EXTRA = [
   'Fase de 16',
   'Oitavas de Final',
@@ -28,21 +26,40 @@ const FASES_EXTRA = [
 ];
 
 // ── Helpers ───────────────────────────────────────────────────
+
 function formatarData(iso) {
   if (!iso) return '';
-  // Garante que é string (jogos extras podem vir como Date do Sheets)
   const str = String(iso).trim();
-  // Formato ISO: 2026-06-28
   if (str.includes('-')) {
     const [y, m, d] = str.split('-');
     return `${d}/${m}`;
   }
-  // Formato DD/MM/YYYY
   if (str.includes('/')) {
     const partes = str.split('/');
     return `${partes[0]}/${partes[1]}`;
   }
   return str;
+}
+
+// Verifica se o jogo já iniciou (horário em Brasília = UTC-3)
+function jogoJaIniciou(jogo) {
+  if (!jogo.data || !jogo.horario) return false;
+  try {
+    const [h, m] = jogo.horario.split(':').map(Number);
+    const hUTC = h + 3;
+    // Trata virada de dia (ex: 23:00 BRT = 02:00 UTC do dia seguinte)
+    let dataUTC = jogo.data;
+    if (hUTC >= 24) {
+      const d = new Date(jogo.data + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + 1);
+      dataUTC = d.toISOString().split('T')[0];
+    }
+    const hFinal = hUTC % 24;
+    const dataISO = `${dataUTC}T${String(hFinal).padStart(2, '0')}:${String(m).padStart(2, '0')}:00Z`;
+    return new Date() >= new Date(dataISO);
+  } catch (e) {
+    return false;
+  }
 }
 
 function medalha(pos) {
@@ -246,9 +263,11 @@ function TelaPalpites({ participanteId }) {
     }));
   }
 
-  async function handleBlur(jogoId) {
+  async function handleBlur(jogoId, jogo) {
     const p = palpites[jogoId] || {};
     if (p.casa === '' || p.casa === undefined || p.visitante === '' || p.visitante === undefined) return;
+    // Bloqueia se jogo já iniciou
+    if (jogoJaIniciou(jogo)) return;
 
     setSalvando(s => ({ ...s, [jogoId]: true }));
     try {
@@ -285,10 +304,16 @@ function TelaPalpites({ participanteId }) {
           const p = palpites[jogo.id] || { casa: '', visitante: '' };
           const res = resultados[jogo.id];
           const temResultado = res !== undefined;
+          const iniciou = jogoJaIniciou(jogo);
+          const bloqueado = temResultado || iniciou;
 
           return (
-            <div key={jogo.id} className={`jogo-card ${temResultado ? 'encerrado' : ''}`}>
-              <div className="jogo-data">{formatarData(jogo.data)}</div>
+            <div key={jogo.id} className={`jogo-card ${bloqueado ? 'encerrado' : ''}`}>
+              <div className="jogo-data">
+                {formatarData(jogo.data)}
+                {jogo.horario && <span className="jogo-horario"> · {jogo.horario}</span>}
+                {iniciou && !temResultado && <span className="jogo-em-andamento"> · Em andamento</span>}
+              </div>
               <div className="jogo-times">
                 <span className="time-nome">{jogo.casa}</span>
                 <div className="placar-inputs">
@@ -298,8 +323,8 @@ function TelaPalpites({ participanteId }) {
                     min="0" max="99"
                     value={p.casa}
                     onChange={e => handleChange(jogo.id, 'casa', e.target.value)}
-                    onBlur={() => handleBlur(jogo.id)}
-                    disabled={temResultado}
+                    onBlur={() => handleBlur(jogo.id, jogo)}
+                    disabled={bloqueado}
                     className="placar-input"
                     placeholder="–"
                   />
@@ -310,8 +335,8 @@ function TelaPalpites({ participanteId }) {
                     min="0" max="99"
                     value={p.visitante}
                     onChange={e => handleChange(jogo.id, 'visitante', e.target.value)}
-                    onBlur={() => handleBlur(jogo.id)}
-                    disabled={temResultado}
+                    onBlur={() => handleBlur(jogo.id, jogo)}
+                    disabled={bloqueado}
                     className="placar-input"
                     placeholder="–"
                   />
@@ -399,8 +424,7 @@ function TelaPalpiteFinal({ participanteId, bloqueado }) {
   async function salvar() {
     if (!campeao || !vice) { setMsg('Selecione campeão e vice.'); return; }
     if (campeao === vice) { setMsg('Campeão e vice não podem ser iguais.'); return; }
-    setSalvando(true);
-    setMsg('');
+    setSalvando(true); setMsg('');
     try {
       await api.salvarPalpiteFinal(participanteId, campeao, vice);
       setMsg('✅ Palpite salvo!');
@@ -463,12 +487,11 @@ function TelaAdmin({ onVoltar }) {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
-  const [abaAdmin, setAbaAdmin] = useState('resultados'); // resultados | jogos
+  const [abaAdmin, setAbaAdmin] = useState('resultados');
 
   async function handleLogin(e) {
     e.preventDefault();
-    setErro('');
-    setCarregando(true);
+    setErro(''); setCarregando(true);
     try {
       await api.adminLogin(senha);
       setLogado(true);
@@ -628,10 +651,10 @@ function AdminJogosExtras({ senha }) {
   const [casa, setCasa] = useState('');
   const [visitante, setVisitante] = useState('');
   const [data, setData] = useState('');
+  const [horario, setHorario] = useState('');
   const [msg, setMsg] = useState('');
   const [carregando, setCarregando] = useState(false);
 
-  // Gera ID automático baseado na fase e times
   function gerarIdJogo() {
     const prefixo = fase.replace(/\s+/g, '').substring(0, 3).toUpperCase();
     const sufixo = Date.now().toString().slice(-4);
@@ -640,15 +663,15 @@ function AdminJogosExtras({ senha }) {
 
   async function handleAdicionar(e) {
     e.preventDefault();
-    if (!fase || !casa || !visitante || !data) { setMsg('Preencha todos os campos.'); return; }
+    if (!fase || !casa || !visitante || !data || !horario) { setMsg('Preencha todos os campos.'); return; }
     if (casa === visitante) { setMsg('Os dois times não podem ser iguais.'); return; }
 
     setCarregando(true); setMsg('');
     try {
       const id = gerarIdJogo();
-      await api.adicionarJogo(senha, id, fase, casa, visitante, data);
+      await api.adicionarJogo(senha, id, fase, casa, visitante, data, horario);
       setMsg(`✅ Jogo adicionado! (${casa} × ${visitante})`);
-      setCasa(''); setVisitante(''); setData('');
+      setCasa(''); setVisitante(''); setData(''); setHorario('');
     } catch (err) {
       setMsg('❌ ' + err.message);
     } finally {
@@ -660,8 +683,8 @@ function AdminJogosExtras({ senha }) {
     <div className="admin-secao">
       <h3>Adicionar jogo eliminatório</h3>
       <p className="admin-info">
-        Use para adicionar jogos das fases eliminatórias conforme os confrontos forem definidos.
-        Os jogos aparecerão automaticamente na tela de palpites para todos.
+        Adicione os confrontos das fases eliminatórias conforme forem definidos.
+        O jogo aparece automaticamente na tela de palpites e fica bloqueado no horário de início.
       </p>
       <form onSubmit={handleAdicionar} className="admin-form">
         <div className="campo">
@@ -674,13 +697,12 @@ function AdminJogosExtras({ senha }) {
 
         <div className="campo">
           <label>Data do jogo</label>
-          <input
-            type="date"
-            value={data}
-            onChange={e => setData(e.target.value)}
-            min="2026-06-28"
-            max="2026-07-19"
-          />
+          <input type="date" value={data} onChange={e => setData(e.target.value)} min="2026-06-28" max="2026-07-19" />
+        </div>
+
+        <div className="campo">
+          <label>Horário (Brasília)</label>
+          <input type="time" value={horario} onChange={e => setHorario(e.target.value)} />
         </div>
 
         <div className="campo">
