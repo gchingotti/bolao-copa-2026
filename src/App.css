@@ -356,6 +356,16 @@ select {
   letter-spacing: 0.5px;
 }
 
+.jogo-horario {
+  color: var(--cinza);
+  font-weight: 400;
+}
+
+.jogo-em-andamento {
+  color: var(--ouro);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
 .jogo-times {
   display: flex;
   align-items: center;
