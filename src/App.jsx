@@ -117,6 +117,9 @@ export default function App() {
           <button className={abaApp === 'palpites' ? 'tab ativa' : 'tab'} onClick={() => setAbaApp('palpites')}>
             📝 Palpites
           </button>
+          <button className={abaApp === 'placares' ? 'tab ativa' : 'tab'} onClick={() => setAbaApp('placares')}>
+            📋 Placares
+          </button>
           <button className={abaApp === 'ranking' ? 'tab ativa' : 'tab'} onClick={() => setAbaApp('ranking')}>
             🏆 Ranking
           </button>
@@ -127,8 +130,9 @@ export default function App() {
       </header>
 
       <main className="main-content">
-        {abaApp === 'palpites' && <TelaPalpites participanteId={usuario.participanteId} />}
-        {abaApp === 'ranking'  && <TelaRanking />}
+        {abaApp === 'palpites'  && <TelaPalpites participanteId={usuario.participanteId} />}
+        {abaApp === 'placares'  && <TelaPlacares />}
+        {abaApp === 'ranking'   && <TelaRanking />}
         {abaApp === 'final'    && (
           <TelaPalpiteFinal
             participanteId={usuario.participanteId}
@@ -357,6 +361,82 @@ function TelaPalpites({ participanteId }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// ── Tela Placares ─────────────────────────────────────────────
+function TelaPlacares() {
+  const [placares, setPlacares] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+
+  useEffect(() => {
+    api.getPlacares()
+      .then(r => setPlacares(r.placares || []))
+      .catch(console.error)
+      .finally(() => setCarregando(false));
+  }, []);
+
+  function iniciais(nome) {
+    return nome.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+  }
+
+  function corAvatar(nome) {
+    const cores = ['#1e7a40', '#185fa5', '#d4a017', '#993556', '#3B6D11', '#854F0B'];
+    let hash = 0;
+    for (let i = 0; i < nome.length; i++) hash = nome.charCodeAt(i) + ((hash << 5) - hash);
+    return cores[Math.abs(hash) % cores.length];
+  }
+
+  if (carregando) return <Loader />;
+
+  if (placares.length === 0) {
+    return (
+      <div className="placares-wrapper">
+        <p className="vazio">Nenhum jogo iniciado ainda.<br />Os placares aparecem aqui quando os jogos começarem.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="placares-wrapper">
+      {placares.map(({ jogo, resultado, palpites }) => (
+        <div key={jogo.id} className="placar-card">
+          <div className="placar-header">
+            <div>
+              <div className="placar-jogo-titulo">{jogo.casa} × {jogo.visitante}</div>
+              <div className="placar-jogo-sub">{formatarData(jogo.data)} · {jogo.horario} · {jogo.fase}</div>
+            </div>
+            {resultado
+              ? <div className="placar-resultado-badge">{resultado.golsCasa} × {resultado.golsVisitante}</div>
+              : <div className="placar-andamento">● Andamento</div>
+            }
+          </div>
+
+          <div className="placar-lista">
+            {palpites
+              .sort((a, b) => (b.pontos || 0) - (a.pontos || 0))
+              .map(p => (
+                <div key={p.participanteId} className="placar-row">
+                  <div className="placar-avatar" style={{ background: corAvatar(p.nome) + '33', color: corAvatar(p.nome) }}>
+                    {iniciais(p.nome)}
+                  </div>
+                  <span className="placar-nome">{p.nome}</span>
+                  <span className="placar-palpite">
+                    {p.semPalpite ? '—' : `${p.golsCasa}×${p.golsVisitante}`}
+                  </span>
+                  {resultado ? (
+                    <span className={`placar-pts ${p.pontos >= 5 ? 'pts-exato' : p.pontos > 0 ? 'pts-parcial' : 'pts-zero'}`}>
+                      {p.semPalpite ? 's/ palpite' : `${p.pontos} pts`}
+                    </span>
+                  ) : (
+                    <span className="placar-pts pts-zero">— pts</span>
+                  )}
+                </div>
+              ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
