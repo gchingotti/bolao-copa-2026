@@ -62,6 +62,33 @@ function jogoJaIniciou(jogo) {
   }
 }
 
+// Calcula o "dia de exibição" do jogo: horários de madrugada (00h-03h59)
+// são agrupados visualmente com o dia anterior, seguindo a lógica de
+// "noite de jogos" que o pessoal usa naturalmente
+function diaExibicao(jogo) {
+  if (!jogo.data || !jogo.horario) return jogo.data;
+  const [h] = jogo.horario.split(':').map(Number);
+  if (h >= 0 && h < 4) {
+    // Volta um dia
+    const [y, m, d] = jogo.data.split('-').map(Number);
+    const data = new Date(Date.UTC(y, m - 1, d));
+    data.setUTCDate(data.getUTCDate() - 1);
+    const yy = data.getUTCFullYear();
+    const mm = String(data.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(data.getUTCDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+  return jogo.data;
+}
+
+function formatarDataLonga(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  const dataObj = new Date(Number(y), Number(m) - 1, Number(d));
+  const diasSemana = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+  return `${d}/${m} · ${diasSemana[dataObj.getDay()]}`;
+}
+
 function medalha(pos) {
   if (pos === 1) return '🥇';
   if (pos === 2) return '🥈';
@@ -233,7 +260,7 @@ function TelaPalpites({ participanteId }) {
   const [salvando, setSalvando] = useState({});
   const [msgs, setMsgs] = useState({});
   const [carregando, setCarregando] = useState(true);
-  const [faseAtiva, setFaseAtiva] = useState('');
+  const [diaAtivo, setDiaAtivo] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -243,7 +270,14 @@ function TelaPalpites({ participanteId }) {
     ]).then(([rJogos, rPalpites, rResultados]) => {
       const listaJogos = rJogos.jogos || [];
       setJogos(listaJogos);
-      if (listaJogos.length) setFaseAtiva(listaJogos[0].fase);
+
+      if (listaJogos.length) {
+        // Seleciona o dia de hoje (ou o próximo dia com jogo) como padrão
+        const hojeISO = new Date().toISOString().split('T')[0];
+        const diasDisponiveis = [...new Set(listaJogos.map(diaExibicao))].sort();
+        const diaDefault = diasDisponiveis.find(d => d >= hojeISO) || diasDisponiveis[diasDisponiveis.length - 1];
+        setDiaAtivo(diaDefault);
+      }
 
       const mapa = {};
       (rPalpites.palpites || []).forEach(p => {
@@ -287,24 +321,32 @@ function TelaPalpites({ participanteId }) {
 
   if (carregando) return <Loader />;
 
-  const fases = [...new Set(jogos.map(j => j.fase))];
+  // Agrupa jogos por dia de exibição (madrugada junto com dia anterior)
+  const dias = [...new Set(jogos.map(diaExibicao))].sort();
+  const jogosDoDia = jogos
+    .filter(j => diaExibicao(j) === diaAtivo)
+    .sort((a, b) => `${a.data}${a.horario}`.localeCompare(`${b.data}${b.horario}`));
 
   return (
     <div className="palpites-wrapper">
       <div className="fases-nav">
-        {fases.map(f => (
+        {dias.map(d => (
           <button
-            key={f}
-            className={faseAtiva === f ? 'fase-btn ativa' : 'fase-btn'}
-            onClick={() => setFaseAtiva(f)}
+            key={d}
+            className={diaAtivo === d ? 'fase-btn ativa' : 'fase-btn'}
+            onClick={() => setDiaAtivo(d)}
           >
-            {f}
+            {formatarData(d)}
           </button>
         ))}
       </div>
 
+      {diaAtivo && (
+        <div className="dia-titulo">{formatarDataLonga(diaAtivo)}</div>
+      )}
+
       <div className="jogos-lista">
-        {jogos.filter(j => j.fase === faseAtiva).map(jogo => {
+        {jogosDoDia.map(jogo => {
           const p = palpites[jogo.id] || { casa: '', visitante: '' };
           const res = resultados[jogo.id];
           const temResultado = res !== undefined;
@@ -314,7 +356,7 @@ function TelaPalpites({ participanteId }) {
           return (
             <div key={jogo.id} className={`jogo-card ${bloqueado ? 'encerrado' : ''}`}>
               <div className="jogo-data">
-                {formatarData(jogo.data)}
+                {jogo.fase}
                 {jogo.horario && <span className="jogo-horario"> · {jogo.horario}</span>}
                 {iniciou && !temResultado && <span className="jogo-em-andamento"> · Em andamento</span>}
               </div>
