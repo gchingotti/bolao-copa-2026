@@ -334,6 +334,18 @@ select {
   color: var(--branco);
 }
 
+.fase-btn:hover { color: var(--branco); }
+
+.dia-titulo {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ouro-claro);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 2px 4px;
+}
+
 .jogos-lista { display: flex; flex-direction: column; gap: 10px; }
 
 .jogo-card {
