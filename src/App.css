@@ -800,3 +800,70 @@ select {
   .time-nome { font-size: 0.9rem; }
   .placar-input { width: 42px; font-size: 1.2rem; }
 }
+/* ── Classificado (mata-mata) ────────────────────────────── */
+.classificado-wrapper {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.classificado-label {
+  font-size: 0.75rem;
+  color: var(--cinza);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.classificado-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.classificado-btn {
+  flex: 1;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: var(--radius-sm);
+  color: var(--cinza);
+  padding: 8px 10px;
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+
+.classificado-btn.ativo {
+  background: rgba(212,160,23,0.2);
+  border-color: var(--ouro);
+  color: var(--ouro-claro);
+}
+
+.classificado-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.classificado-msg {
+  font-size: 0.75rem;
+  color: var(--verde-claro);
+}
+
+/* ── Placares — info do classificado ────────────────────── */
+.placar-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.placar-classificado {
+  font-size: 0.7rem;
+  color: var(--ouro);
+  font-weight: 600;
+}
