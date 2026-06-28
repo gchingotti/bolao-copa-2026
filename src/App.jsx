@@ -41,13 +41,11 @@ function formatarData(iso) {
   return str;
 }
 
-// Verifica se o jogo já iniciou (horário em Brasília = UTC-3)
 function jogoJaIniciou(jogo) {
   if (!jogo.data || !jogo.horario) return false;
   try {
     const [h, m] = jogo.horario.split(':').map(Number);
     const hUTC = h + 3;
-    // Trata virada de dia (ex: 23:00 BRT = 02:00 UTC do dia seguinte)
     let dataUTC = jogo.data;
     if (hUTC >= 24) {
       const d = new Date(jogo.data + 'T00:00:00Z');
@@ -62,14 +60,10 @@ function jogoJaIniciou(jogo) {
   }
 }
 
-// Calcula o "dia de exibição" do jogo: horários de madrugada (00h-03h59)
-// são agrupados visualmente com o dia anterior, seguindo a lógica de
-// "noite de jogos" que o pessoal usa naturalmente
 function diaExibicao(jogo) {
   if (!jogo.data || !jogo.horario) return jogo.data;
   const [h] = jogo.horario.split(':').map(Number);
   if (h >= 0 && h < 4) {
-    // Volta um dia
     const [y, m, d] = jogo.data.split('-').map(Number);
     const data = new Date(Date.UTC(y, m - 1, d));
     data.setUTCDate(data.getUTCDate() - 1);
@@ -157,9 +151,9 @@ export default function App() {
       </header>
 
       <main className="main-content">
-        {abaApp === 'palpites'  && <TelaPalpites participanteId={usuario.participanteId} />}
-        {abaApp === 'placares'  && <TelaPlacares />}
-        {abaApp === 'ranking'   && <TelaRanking />}
+        {abaApp === 'palpites' && <TelaPalpites participanteId={usuario.participanteId} />}
+        {abaApp === 'placares' && <TelaPlacares />}
+        {abaApp === 'ranking'  && <TelaRanking />}
         {abaApp === 'final'    && (
           <TelaPalpiteFinal
             participanteId={usuario.participanteId}
@@ -184,7 +178,6 @@ function TelaLogin({ onEntrar, onAdmin }) {
     setErro('');
     if (!nome.trim() || !pin.trim()) { setErro('Preencha nome e PIN'); return; }
     if (pin.length < 4) { setErro('PIN deve ter ao menos 4 dígitos'); return; }
-
     setCarregando(true);
     try {
       const res = modo === 'login'
@@ -206,46 +199,24 @@ function TelaLogin({ onEntrar, onAdmin }) {
           <h1 className="login-titulo">Bolão Copa 2026</h1>
           <p className="login-sub">EUA • México • Canadá</p>
         </div>
-
         <div className="login-toggle">
-          <button className={modo === 'login' ? 'toggle-btn ativo' : 'toggle-btn'} onClick={() => setModo('login')}>
-            Entrar
-          </button>
-          <button className={modo === 'cadastro' ? 'toggle-btn ativo' : 'toggle-btn'} onClick={() => setModo('cadastro')}>
-            Cadastrar
-          </button>
+          <button className={modo === 'login' ? 'toggle-btn ativo' : 'toggle-btn'} onClick={() => setModo('login')}>Entrar</button>
+          <button className={modo === 'cadastro' ? 'toggle-btn ativo' : 'toggle-btn'} onClick={() => setModo('cadastro')}>Cadastrar</button>
         </div>
-
         <form onSubmit={handleSubmit} className="login-form">
           <div className="campo">
             <label>Nome</label>
-            <input
-              type="text"
-              value={nome}
-              onChange={e => setNome(e.target.value)}
-              placeholder="Como você quer ser chamado"
-              autoComplete="off"
-            />
+            <input type="text" value={nome} onChange={e => setNome(e.target.value)} placeholder="Como você quer ser chamado" autoComplete="off" />
           </div>
           <div className="campo">
             <label>PIN (4+ dígitos)</label>
-            <input
-              type="password"
-              inputMode="numeric"
-              value={pin}
-              onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
-              placeholder="••••"
-              maxLength={8}
-            />
+            <input type="password" inputMode="numeric" value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, ''))} placeholder="••••" maxLength={8} />
           </div>
-
           {erro && <p className="erro-msg">{erro}</p>}
-
           <button type="submit" className="btn-principal" disabled={carregando}>
             {carregando ? 'Aguarde...' : modo === 'login' ? 'Entrar' : 'Cadastrar'}
           </button>
         </form>
-
         <button className="btn-admin-link" onClick={onAdmin}>🔐 Área Admin</button>
       </div>
     </div>
@@ -257,6 +228,7 @@ function TelaPalpites({ participanteId }) {
   const [jogos, setJogos] = useState([]);
   const [resultados, setResultados] = useState({});
   const [palpites, setPalpites] = useState({});
+  const [classificados, setClassificados] = useState({});
   const [salvando, setSalvando] = useState({});
   const [msgs, setMsgs] = useState({});
   const [carregando, setCarregando] = useState(true);
@@ -267,12 +239,12 @@ function TelaPalpites({ participanteId }) {
       api.getJogos(),
       api.getPalpites(participanteId),
       api.getResultados(),
-    ]).then(([rJogos, rPalpites, rResultados]) => {
+      api.getClassificados(participanteId),
+    ]).then(([rJogos, rPalpites, rResultados, rClass]) => {
       const listaJogos = rJogos.jogos || [];
       setJogos(listaJogos);
 
       if (listaJogos.length) {
-        // Seleciona o dia de hoje (ou o próximo dia com jogo) como padrão
         const hojeISO = new Date().toISOString().split('T')[0];
         const diasDisponiveis = [...new Set(listaJogos.map(diaExibicao))].sort();
         const diaDefault = diasDisponiveis.find(d => d >= hojeISO) || diasDisponiveis[diasDisponiveis.length - 1];
@@ -290,21 +262,24 @@ function TelaPalpites({ participanteId }) {
         mapRes[r.jogoId] = { casa: r.golsCasa, visitante: r.golsVisitante };
       });
       setResultados(mapRes);
+
+      const mapClass = {};
+      (rClass.classificados || []).forEach(c => {
+        mapClass[c.jogoId] = c.classificado;
+      });
+      setClassificados(mapClass);
+
     }).catch(console.error).finally(() => setCarregando(false));
   }, [participanteId]);
 
   function handleChange(jogoId, campo, val) {
     const limpo = val.replace(/\D/g, '').slice(0, 2);
-    setPalpites(prev => ({
-      ...prev,
-      [jogoId]: { ...prev[jogoId], [campo]: limpo }
-    }));
+    setPalpites(prev => ({ ...prev, [jogoId]: { ...prev[jogoId], [campo]: limpo } }));
   }
 
   async function handleBlur(jogoId, jogo) {
     const p = palpites[jogoId] || {};
     if (p.casa === '' || p.casa === undefined || p.visitante === '' || p.visitante === undefined) return;
-    // Bloqueia se jogo já iniciou
     if (jogoJaIniciou(jogo)) return;
 
     setSalvando(s => ({ ...s, [jogoId]: true }));
@@ -319,9 +294,20 @@ function TelaPalpites({ participanteId }) {
     }
   }
 
+  async function handleClassificado(jogoId, jogo, time) {
+    if (jogoJaIniciou(jogo)) return;
+    setClassificados(prev => ({ ...prev, [jogoId]: time }));
+    try {
+      await api.salvarClassificado(participanteId, jogoId, time);
+      setMsgs(m => ({ ...m, [jogoId + '_class']: '✓' }));
+      setTimeout(() => setMsgs(m => ({ ...m, [jogoId + '_class']: '' })), 2000);
+    } catch (err) {
+      setMsgs(m => ({ ...m, [jogoId + '_class']: '✗' }));
+    }
+  }
+
   if (carregando) return <Loader />;
 
-  // Agrupa jogos por dia de exibição (madrugada junto com dia anterior)
   const dias = [...new Set(jogos.map(diaExibicao))].sort();
   const jogosDoDia = jogos
     .filter(j => diaExibicao(j) === diaAtivo)
@@ -331,19 +317,13 @@ function TelaPalpites({ participanteId }) {
     <div className="palpites-wrapper">
       <div className="fases-nav">
         {dias.map(d => (
-          <button
-            key={d}
-            className={diaAtivo === d ? 'fase-btn ativa' : 'fase-btn'}
-            onClick={() => setDiaAtivo(d)}
-          >
+          <button key={d} className={diaAtivo === d ? 'fase-btn ativa' : 'fase-btn'} onClick={() => setDiaAtivo(d)}>
             {formatarData(d)}
           </button>
         ))}
       </div>
 
-      {diaAtivo && (
-        <div className="dia-titulo">{formatarDataLonga(diaAtivo)}</div>
-      )}
+      {diaAtivo && <div className="dia-titulo">{formatarDataLonga(diaAtivo)}</div>}
 
       <div className="jogos-lista">
         {jogosDoDia.map(jogo => {
@@ -352,6 +332,8 @@ function TelaPalpites({ participanteId }) {
           const temResultado = res !== undefined;
           const iniciou = jogoJaIniciou(jogo);
           const bloqueado = temResultado || iniciou;
+          const classAtual = classificados[jogo.id] || '';
+          const ehMataMata = jogo.mataMata === true;
 
           return (
             <div key={jogo.id} className={`jogo-card ${bloqueado ? 'encerrado' : ''}`}>
@@ -360,35 +342,54 @@ function TelaPalpites({ participanteId }) {
                 {jogo.horario && <span className="jogo-horario"> · {jogo.horario}</span>}
                 {iniciou && !temResultado && <span className="jogo-em-andamento"> · Em andamento</span>}
               </div>
+
               <div className="jogo-times">
                 <span className="time-nome">{jogo.casa}</span>
                 <div className="placar-inputs">
                   <input
-                    type="number"
-                    inputMode="numeric"
-                    min="0" max="99"
+                    type="number" inputMode="numeric" min="0" max="99"
                     value={p.casa}
                     onChange={e => handleChange(jogo.id, 'casa', e.target.value)}
                     onBlur={() => handleBlur(jogo.id, jogo)}
-                    disabled={bloqueado}
-                    className="placar-input"
-                    placeholder="–"
+                    disabled={bloqueado} className="placar-input" placeholder="–"
                   />
                   <span className="placar-x">×</span>
                   <input
-                    type="number"
-                    inputMode="numeric"
-                    min="0" max="99"
+                    type="number" inputMode="numeric" min="0" max="99"
                     value={p.visitante}
                     onChange={e => handleChange(jogo.id, 'visitante', e.target.value)}
                     onBlur={() => handleBlur(jogo.id, jogo)}
-                    disabled={bloqueado}
-                    className="placar-input"
-                    placeholder="–"
+                    disabled={bloqueado} className="placar-input" placeholder="–"
                   />
                 </div>
                 <span className="time-nome visitante">{jogo.visitante}</span>
               </div>
+
+              {/* Palpite de classificado — só em jogos mata-mata */}
+              {ehMataMata && (
+                <div className="classificado-wrapper">
+                  <span className="classificado-label">🏅 Quem avança?</span>
+                  <div className="classificado-btns">
+                    <button
+                      className={`classificado-btn ${classAtual === jogo.casa ? 'ativo' : ''}`}
+                      onClick={() => !bloqueado && handleClassificado(jogo.id, jogo, jogo.casa)}
+                      disabled={bloqueado}
+                    >
+                      {jogo.casa}
+                    </button>
+                    <button
+                      className={`classificado-btn ${classAtual === jogo.visitante ? 'ativo' : ''}`}
+                      onClick={() => !bloqueado && handleClassificado(jogo.id, jogo, jogo.visitante)}
+                      disabled={bloqueado}
+                    >
+                      {jogo.visitante}
+                    </button>
+                  </div>
+                  {msgs[jogo.id + '_class'] && (
+                    <span className="classificado-msg">{msgs[jogo.id + '_class']}</span>
+                  )}
+                </div>
+              )}
 
               {temResultado && (
                 <div className="resultado-real">
@@ -442,43 +443,53 @@ function TelaPlacares() {
 
   return (
     <div className="placares-wrapper">
-      {placares.map(({ jogo, resultado, palpites }) => (
-        <div key={jogo.id} className="placar-card">
-          <div className="placar-header">
-            <div>
-              <div className="placar-jogo-titulo">{jogo.casa} × {jogo.visitante}</div>
-              <div className="placar-jogo-sub">{formatarData(jogo.data)} · {jogo.horario} · {jogo.fase}</div>
-            </div>
-            {resultado
-              ? <div className="placar-resultado-badge">{resultado.golsCasa} × {resultado.golsVisitante}</div>
-              : <div className="placar-andamento">● Andamento</div>
-            }
-          </div>
+      {placares.map(({ jogo, resultado, palpites }) => {
+        const ehMataMata = jogo.mataMata === true;
+        const totalPts = p => (p.pontos || 0) + (p.pontosClassificado || 0);
 
-          <div className="placar-lista">
-            {palpites
-              .sort((a, b) => (b.pontos || 0) - (a.pontos || 0))
-              .map(p => (
-                <div key={p.participanteId} className="placar-row">
-                  <div className="placar-avatar" style={{ background: corAvatar(p.nome) + '33', color: corAvatar(p.nome) }}>
-                    {iniciais(p.nome)}
-                  </div>
-                  <span className="placar-nome">{p.nome}</span>
-                  <span className="placar-palpite">
-                    {p.semPalpite ? '—' : `${p.golsCasa}×${p.golsVisitante}`}
-                  </span>
-                  {resultado ? (
-                    <span className={`placar-pts ${p.pontos >= 5 ? 'pts-exato' : p.pontos > 0 ? 'pts-parcial' : 'pts-zero'}`}>
-                      {p.semPalpite ? 's/ palpite' : `${p.pontos} pts`}
+        return (
+          <div key={jogo.id} className="placar-card">
+            <div className="placar-header">
+              <div>
+                <div className="placar-jogo-titulo">{jogo.casa} × {jogo.visitante}</div>
+                <div className="placar-jogo-sub">{formatarData(jogo.data)} · {jogo.horario} · {jogo.fase}</div>
+              </div>
+              {resultado
+                ? <div className="placar-resultado-badge">{resultado.golsCasa} × {resultado.golsVisitante}</div>
+                : <div className="placar-andamento">● Andamento</div>
+              }
+            </div>
+
+            <div className="placar-lista">
+              {palpites
+                .sort((a, b) => totalPts(b) - totalPts(a))
+                .map(p => (
+                  <div key={p.participanteId} className="placar-row">
+                    <div className="placar-avatar" style={{ background: corAvatar(p.nome) + '33', color: corAvatar(p.nome) }}>
+                      {iniciais(p.nome)}
+                    </div>
+                    <div className="placar-info">
+                      <span className="placar-nome">{p.nome}</span>
+                      {ehMataMata && p.classificado && (
+                        <span className="placar-classificado">→ {p.classificado}</span>
+                      )}
+                    </div>
+                    <span className="placar-palpite">
+                      {p.semPalpite ? '—' : `${p.golsCasa}×${p.golsVisitante}`}
                     </span>
-                  ) : (
-                    <span className="placar-pts pts-zero">— pts</span>
-                  )}
-                </div>
-              ))}
+                    {resultado ? (
+                      <span className={`placar-pts ${totalPts(p) >= 5 ? 'pts-exato' : totalPts(p) > 0 ? 'pts-parcial' : 'pts-zero'}`}>
+                        {p.semPalpite ? 's/ palpite' : `${totalPts(p)} pts`}
+                      </span>
+                    ) : (
+                      <span className="placar-pts pts-zero">— pts</span>
+                    )}
+                  </div>
+                ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -568,7 +579,6 @@ function TelaPalpiteFinal({ participanteId, bloqueado }) {
             ? '🔒 A Copa já começou — palpites encerrados.'
             : 'Estes palpites ficam bloqueados após o início da Copa.'}
         </p>
-
         <div className="final-campo">
           <label>🥇 Campeão</label>
           <select value={campeao} onChange={e => setCampeao(e.target.value)} disabled={bloqueado}>
@@ -576,7 +586,6 @@ function TelaPalpiteFinal({ participanteId, bloqueado }) {
             {SELECOES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-
         <div className="final-campo">
           <label>🥈 Vice-campeão</label>
           <select value={vice} onChange={e => setVice(e.target.value)} disabled={bloqueado}>
@@ -584,19 +593,16 @@ function TelaPalpiteFinal({ participanteId, bloqueado }) {
             {SELECOES.filter(s => s !== campeao).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-
         {!bloqueado && (
           <button className="btn-principal" onClick={salvar} disabled={salvando}>
             {salvando ? 'Salvando...' : 'Salvar palpite'}
           </button>
         )}
-
         {msg && <p className="final-msg">{msg}</p>}
-
         <div className="final-regras">
           <h3>Pontuação bônus</h3>
-          <p>✅ Acertar o campeão = <strong>5 pts</strong></p>
-          <p>✅ Acertar o vice = <strong>3 pts</strong></p>
+          <p>✅ Acertar o campeão = <strong>20 pts</strong></p>
+          <p>✅ Acertar o vice = <strong>10 pts</strong></p>
         </div>
       </div>
     </div>
@@ -651,7 +657,6 @@ function TelaAdmin({ onVoltar }) {
         <h2>⚙️ Painel Admin</h2>
         <button className="btn-sair" onClick={onVoltar}>Voltar</button>
       </div>
-
       <div className="login-toggle" style={{ marginBottom: 0 }}>
         <button className={abaAdmin === 'resultados' ? 'toggle-btn ativo' : 'toggle-btn'} onClick={() => setAbaAdmin('resultados')}>
           Resultados
@@ -660,7 +665,6 @@ function TelaAdmin({ onVoltar }) {
           + Jogos extras
         </button>
       </div>
-
       {abaAdmin === 'resultados' && <AdminResultados senha={senha} />}
       {abaAdmin === 'jogos'      && <AdminJogosExtras senha={senha} />}
     </div>
@@ -672,8 +676,10 @@ function AdminResultados({ senha }) {
   const [jogos, setJogos] = useState([]);
   const [resultados, setResultados] = useState({});
   const [jogoSel, setJogoSel] = useState('');
+  const [jogoObj, setJogoObj] = useState(null);
   const [golsCasa, setGolsCasa] = useState('');
   const [golsVisitante, setGolsVisitante] = useState('');
+  const [classificado, setClassificado] = useState('');
   const [campeao, setCampeao] = useState('');
   const [vice, setVice] = useState('');
   const [msg, setMsg] = useState('');
@@ -689,14 +695,22 @@ function AdminResultados({ senha }) {
     setResultados(mapa);
   }
 
+  function handleJogoSel(id) {
+    setJogoSel(id);
+    setClassificado('');
+    const j = jogos.find(j => j.id === id) || null;
+    setJogoObj(j);
+  }
+
   async function handleLancar(e) {
     e.preventDefault();
     if (!jogoSel || golsCasa === '' || golsVisitante === '') { setMsg('Preencha todos os campos.'); return; }
+    if (jogoObj?.mataMata && !classificado) { setMsg('Selecione quem se classifica.'); return; }
     setCarregando(true); setMsg('');
     try {
-      await api.lancarResultado(senha, jogoSel, Number(golsCasa), Number(golsVisitante));
+      await api.lancarResultado(senha, jogoSel, Number(golsCasa), Number(golsVisitante), classificado || null);
       setMsg('✅ Resultado salvo e pontos calculados!');
-      setJogoSel(''); setGolsCasa(''); setGolsVisitante('');
+      setJogoSel(''); setJogoObj(null); setGolsCasa(''); setGolsVisitante(''); setClassificado('');
       carregarDados();
     } catch (err) {
       setMsg('❌ ' + err.message);
@@ -724,7 +738,7 @@ function AdminResultados({ senha }) {
       <div className="admin-secao">
         <h3>Lançar resultado de jogo</h3>
         <form onSubmit={handleLancar} className="admin-form">
-          <select value={jogoSel} onChange={e => setJogoSel(e.target.value)}>
+          <select value={jogoSel} onChange={e => handleJogoSel(e.target.value)}>
             <option value="">Selecione o jogo...</option>
             {jogos.map(j => (
               <option key={j.id} value={j.id}>
@@ -732,13 +746,25 @@ function AdminResultados({ senha }) {
               </option>
             ))}
           </select>
+
           <div className="admin-placar">
-            <input type="number" min="0" max="99" value={golsCasa}
-              onChange={e => setGolsCasa(e.target.value)} placeholder="Casa" />
+            <input type="number" min="0" max="99" value={golsCasa} onChange={e => setGolsCasa(e.target.value)} placeholder="Casa" />
             <span>×</span>
-            <input type="number" min="0" max="99" value={golsVisitante}
-              onChange={e => setGolsVisitante(e.target.value)} placeholder="Visitante" />
+            <input type="number" min="0" max="99" value={golsVisitante} onChange={e => setGolsVisitante(e.target.value)} placeholder="Visitante" />
           </div>
+
+          {/* Campo de classificado — só aparece em jogos mata-mata */}
+          {jogoObj?.mataMata && (
+            <div className="campo">
+              <label>🏅 Quem se classificou?</label>
+              <select value={classificado} onChange={e => setClassificado(e.target.value)}>
+                <option value="">Selecione o classificado...</option>
+                <option value={jogoObj.casa}>{jogoObj.casa}</option>
+                <option value={jogoObj.visitante}>{jogoObj.visitante}</option>
+              </select>
+            </div>
+          )}
+
           <button type="submit" className="btn-principal" disabled={carregando}>
             {carregando ? 'Salvando...' : 'Lançar resultado'}
           </button>
@@ -787,7 +813,6 @@ function AdminJogosExtras({ senha }) {
     e.preventDefault();
     if (!fase || !casa || !visitante || !data || !horario) { setMsg('Preencha todos os campos.'); return; }
     if (casa === visitante) { setMsg('Os dois times não podem ser iguais.'); return; }
-
     setCarregando(true); setMsg('');
     try {
       const id = gerarIdJogo();
@@ -805,8 +830,7 @@ function AdminJogosExtras({ senha }) {
     <div className="admin-secao">
       <h3>Adicionar jogo eliminatório</h3>
       <p className="admin-info">
-        Adicione os confrontos das fases eliminatórias conforme forem definidos.
-        O jogo aparece automaticamente na tela de palpites e fica bloqueado no horário de início.
+        Adicione os confrontos das fases eliminatórias. O jogo aparece automaticamente na tela de palpites com opção de classificado.
       </p>
       <form onSubmit={handleAdicionar} className="admin-form">
         <div className="campo">
@@ -816,17 +840,14 @@ function AdminJogosExtras({ senha }) {
             {FASES_EXTRA.map(f => <option key={f} value={f}>{f}</option>)}
           </select>
         </div>
-
         <div className="campo">
           <label>Data do jogo</label>
           <input type="date" value={data} onChange={e => setData(e.target.value)} min="2026-06-28" max="2026-07-19" />
         </div>
-
         <div className="campo">
           <label>Horário (Brasília)</label>
           <input type="time" value={horario} onChange={e => setHorario(e.target.value)} />
         </div>
-
         <div className="campo">
           <label>Time 1 (mandante)</label>
           <select value={casa} onChange={e => setCasa(e.target.value)}>
@@ -834,7 +855,6 @@ function AdminJogosExtras({ senha }) {
             {SELECOES.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-
         <div className="campo">
           <label>Time 2 (visitante)</label>
           <select value={visitante} onChange={e => setVisitante(e.target.value)}>
@@ -842,12 +862,10 @@ function AdminJogosExtras({ senha }) {
             {SELECOES.filter(s => s !== casa).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
-
         <button type="submit" className="btn-principal" disabled={carregando}>
           {carregando ? 'Adicionando...' : 'Adicionar jogo'}
         </button>
       </form>
-
       {msg && <p className="admin-msg">{msg}</p>}
     </div>
   );
