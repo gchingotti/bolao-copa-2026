@@ -34,6 +34,9 @@ export async function getJogos() {
 }
 
 // ── Palpites ──────────────────────────────────────────────────
+export async function getDadosPalpites(participanteId) {
+  return post('getDadosPalpites', { participanteId });
+}
 export async function getPalpites(participanteId) {
   return post('getPalpites', { participanteId });
 }
