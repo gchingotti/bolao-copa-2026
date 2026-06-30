@@ -867,3 +867,94 @@ select {
   color: var(--ouro);
   font-weight: 600;
 }
+/* ── Histórico ───────────────────────────────────────────── */
+.btn-historico-voltar {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--cinza);
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-bottom: 4px;
+  transition: all 0.2s;
+}
+.btn-historico-voltar:hover { color: var(--branco); border-color: var(--ouro); }
+
+.historico-btn { border-color: rgba(212,160,23,0.4); color: var(--ouro); }
+.historico-btn:hover { background: rgba(212,160,23,0.1); }
+
+.historico-lista { display: flex; flex-direction: column; gap: 8px; }
+
+.historico-card {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.historico-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.historico-fase { font-size: 0.72rem; color: var(--cinza); text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; }
+.historico-data { font-size: 0.72rem; color: var(--cinza); }
+
+.historico-jogo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.historico-time {
+  flex: 1;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--branco);
+}
+.historico-time.right { text-align: right; }
+
+.historico-placares {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.historico-palpite {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--branco);
+}
+
+.historico-resultado {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.8rem;
+  color: var(--ouro);
+  font-weight: 600;
+}
+
+.historico-classificado {
+  font-size: 0.75rem;
+  color: var(--cinza);
+}
+
+/* ── Classificado auto ───────────────────────────────────── */
+.classificado-auto {
+  font-size: 0.8rem;
+  color: var(--cinza);
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  margin-top: 8px;
+}
+.classificado-auto strong { color: var(--ouro-claro); }
+.classificado-auto.encerrado-class { color: var(--cinza); }
+.classificado-hint { color: var(--cinza); font-size: 0.75rem; }
